@@ -376,11 +376,109 @@ graph TD
 
 ---
 
-## Bonus (If Time Permits)
+## Bonus — Assessment & Implementation Plan
 
-| Bonus Feature | Who Should Handle |
-|---------------|-------------------|
-| Cookies & Sessions | Person B (HTTP layer) |
-| Multiple CGI support | Person C |
-| HEAD, PUT, OPTIONS, TRACE | Person B |
+> [!IMPORTANT]
+> The bonus will **NOT be evaluated** unless your mandatory part is **100% perfect**. Only attempt after mandatory is fully stable and tested.
+
+### Difficulty Assessment
+
+| Bonus Feature | Difficulty | Effort | Who |
+|---------------|------------|--------|-----|
+| **Cookies & Session Management** | 🟡 Medium | ~2–3 days | Person B |
+| **Multiple CGI support** (PHP + Python) | 🟢 Easy | ~0.5–1 day | Person C |
+
+### Verdict: ✅ Do the Bonus — It's Worth It
+
+The Webserv bonus is one of the **easier bonuses** across 42 projects. It doesn't require new system-level concepts — it's purely application-level logic built on top of your existing mandatory infrastructure.
+
+---
+
+### Bonus Feature 1: Cookies & Session Management (Person B)
+
+**Why it's medium, not hard:** Cookies are just HTTP headers. Person B already parses and builds headers, so this is adding one more header type plus a simple in-memory store.
+
+#### Implementation Steps
+- [ ] Parse `Cookie` header from incoming requests (`Cookie: session_id=abc123; theme=dark`)
+- [ ] Build `Set-Cookie` header in responses (`Set-Cookie: session_id=abc123; Path=/; HttpOnly`)
+- [ ] Create a `SessionManager` class with a `std::map<std::string, SessionData>`
+- [ ] Generate random session IDs (use `rand()` + timestamp, or read from `/dev/urandom`)
+- [ ] On first visit → create session, set cookie
+- [ ] On subsequent visits → look up session by cookie value
+- [ ] Handle session expiry (optional: timeout-based cleanup)
+
+#### What Person B Needs to Learn
+| Topic | Resource |
+|-------|----------|
+| HTTP Cookie spec | [RFC 6265](https://www.rfc-editor.org/rfc/rfc6265) (sections 4–5) |
+| `Set-Cookie` syntax | `Set-Cookie: name=value; Path=/; HttpOnly; Max-Age=3600` |
+| Session concept | Server-side map keyed by a random token |
+
+#### Test
+```bash
+# First request — server sets a cookie
+curl -v http://localhost:8080/
+# Look for: Set-Cookie: session_id=xxxx
+
+# Second request — send cookie back
+curl -v -b "session_id=xxxx" http://localhost:8080/
+# Server should recognize the session
+```
+
+---
+
+### Bonus Feature 2: Multiple CGI Support (Person C)
+
+**Why it's easy:** If your CGI handler already works for one language (e.g., Python), supporting another (e.g., PHP) is just a config mapping change. The `fork()` + `execve()` + `pipe()` logic stays identical.
+
+#### Implementation Steps
+- [ ] Support multiple `cgi_extension` / `cgi_path` pairs per location block
+- [ ] Config example:
+  ```nginx
+  location /cgi-bin {
+      cgi_extension .py /usr/bin/python3;
+      cgi_extension .php /usr/bin/php-cgi;
+  }
+  ```
+- [ ] In `CgiHandler`, look up the correct interpreter based on the file extension
+- [ ] Test with both a Python and PHP CGI script
+
+#### Test Scripts
+**Python** (`test.py`):
+```python
+#!/usr/bin/env python3
+import os
+print("Content-Type: text/html\r\n\r\n")
+print("<h1>Python CGI</h1>")
+print(f"<p>Method: {os.environ.get('REQUEST_METHOD')}</p>")
+```
+
+**PHP** (`test.php`):
+```php
+<?php
+echo "Content-Type: text/html\r\n\r\n";
+echo "<h1>PHP CGI</h1>";
+echo "<p>Method: " . $_SERVER['REQUEST_METHOD'] . "</p>";
+?>
+```
+
+```bash
+curl http://localhost:8080/cgi-bin/test.py   # → Python output
+curl http://localhost:8080/cgi-bin/test.php   # → PHP output
+```
+
+---
+
+### Bonus Strategy & Timeline
+
+| When | What | Who |
+|------|------|-----|
+| After mandatory is **frozen & tested** | Start bonus | All |
+| +1 day | Multiple CGI config support | Person C |
+| +2–3 days | Cookie parsing + session store | Person B |
+| +1 day | Integration testing with bonus features | All |
+| **Total bonus time** | **~3–4 days** | |
+
+> [!TIP]
+> **Recommended approach:** Finish mandatory → stress test → fix all bugs → create a `mandatory-final` git tag → then start bonus on a separate branch. If bonus breaks anything, you can always fall back.
 
