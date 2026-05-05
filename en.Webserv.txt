@@ -4,7 +4,7 @@ This is when you finally understand why URLs start
 with HTTP
 
 Summary:
-This project is about writing your own HTTP server.
+This 42 school project is about writing your own HTTP server.
 
 You will be able to test it with an actual browser.
 HTTP is one of the most widely used protocols on the internet.
@@ -16,60 +16,17 @@ Version: 24.0
 
 
 Contents
-I Introduction 2
 
-II General rules 3
-
-III AI Instructions 4
-
-IV Mandatory part 6
-IV.1 Requirements . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
-IV.2 For MacOS only . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
-IV.3 Configuration file . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10
-
-V Readme Requirements 12
-
-VI Bonus part 13
-
-VII Submission and peer-evaluation 14
-
-1
+General rules 
 
 
+Mandatory part 
+Requirements
+Configuration file 
 
-Chapter I
-Introduction
+Readme Requirements
 
-The Hypertext Transfer Protocol (HTTP) is an application protocol for distributed,
-collaborative, hypermedia information systems.
-
-HTTP is the foundation of data communication for the World Wide Web, where hyper-
-text documents include hyperlinks to other resources that the user can easily access. For
-example, by clicking a mouse button or tapping the screen on a web browser.
-
-HTTP was developed to support hypertext functionality and the growth of the World
-Wide Web.
-
-The primary function of a web server is to store, process, and deliver web pages to clients.
-Client-server communication occurs through the Hypertext Transfer Protocol (HTTP).
-
-Pages delivered are most frequently HTML documents, which may include images, style
-sheets, and scripts in addition to the text content.
-
-Multiple web servers may be used for a high-traffic website, splitting traffic between mul-
-tiple physical machines.
-
-A user agent, commonly a web browser or web crawler, initiates communication by re-
-questing a specific resource using HTTP, and the server responds with the content of that
-resource or an error message if unable to do so. The resource is typically a real file on
-the server’s storage, or the result of a program. But this is not always the case and can
-actually be many other things.
-
-Although its primary function is to serve content, HTTP also enables clients to send
-data. This feature is used for submitting web forms, including the uploading of files.
-
-2
-
+VI Bonus part
 
 
 Chapter II
@@ -97,12 +54,8 @@ versions if possible.
 
 • Any external library and Boost libraries are forbidden.
 
-3
 
-
-
-
-
+=========================================================================================
 
 Chapter IV
 Mandatory part
@@ -137,11 +90,7 @@ Even though poll() is mentioned in the subject and evaluation sheet,
 you can use any equivalent function such as select(), kqueue(), or
 epoll().
 
-6
 
-
-
-Webserv This is when you finally understand why URLs start with HTTP
 
 Please read the RFCs defining the HTTP protocol, and perform tests
 with telnet and NGINX before starting this project.
@@ -149,11 +98,7 @@ Although you are not required to implement the entire RFCs, reading
 it will help you develop the required features.
 The HTTP 1.0 is suggested as a reference point, but not enforced.
 
-7
-
-
-
-Webserv This is when you finally understand why URLs start with HTTP
+======================================================================================
 
 IV.1 Requirements
 • Your program must use a configuration file, provided as an argument on the com-
@@ -196,39 +141,15 @@ differences between HTTP versions).
 • You must be able to serve a fully static website.
 • Clients must be able to upload files.
 • You need at least the GET, POST, and DELETE methods.
-
-8
-
-
-
-Webserv This is when you finally understand why URLs start with HTTP
-
 • Stress test your server to ensure it remains available at all times.
 • Your server must be able to listen to multiple ports to deliver different content (see
-
 Configuration file).
 
 We deliberately chose to offer only a subset of the HTTP RFC. In this
 context, the virtual host feature is considered out of scope. But
 you are allowed to implement it if you want.
 
-9
 
-
-
-Webserv This is when you finally understand why URLs start with HTTP
-
-IV.2 For MacOS only
-
-Since macOS handles write() differently from other Unix-based OSes,
-you are allowed to use fcntl().
-You must use file descriptors in non-blocking mode to achieve
-behaviour similar to that of other Unix OSes.
-
-However, you are allowed to use fcntl() only with the following
-flags:
-F_SETFL, O_NONBLOCK and, FD_CLOEXEC.
-Any other flag is forbidden.
 
 IV.3 Configuration file
 
@@ -256,12 +177,6 @@ is rooted to /tmp/www, URL /kapouet/pouic/toto/pouet will search for
 ◦ Uploading files from the clients to the server is authorized, and storage location
 
 is provided.
-
-10
-
-
-
-Webserv This is when you finally understand why URLs start with HTTP
 
 ◦ Execution of CGI, based on file extension (for example .php). Here are some
 specific remarks regarding CGIs:
@@ -301,9 +216,7 @@ Do not test with only one program. Write your tests in a more
 suitable language, such as Python or Golang, among others, even
 in C or C++ if you prefer.
 
-11
-
-
+=========================================================================================
 
 Chapter V
 Readme Requirements
@@ -349,33 +262,3 @@ Here are some additional features you can implement:
 The bonus part will only be assessed if the mandatory part is fully
 completed without issues. If you fail to meet all the mandatory
 requirements, your bonus part will not be evaluated.
-
-13
-
-
-
-Chapter VII
-Submission and peer-evaluation
-
-Submit your assignment in your Git repository as usual. Only the content of your repos-
-itory will be evaluated during the defense. Be sure to double-check the names of your
-files to ensure they are correct.
-
-During the evaluation, a brief modification of the project may occasionally be re-
-quested. This could involve a minor behaviour change, a few lines of code to write or
-rewrite, or an easy-to-add feature.
-
-While this step may not be applicable to every project, you must be prepared for it
-if it is mentioned in the evaluation guidelines.
-
-This step is meant to verify your actual understanding of a specific part of the project.
-The modification can be performed in any development environment you choose (e.g.,
-your usual setup), and it should be feasible within a few minutes — unless a specific time
-frame is defined as part of the evaluation.
-You can, for example, be asked to make a small update to a function or script, modify a
-display, or adjust a data structure to store new information, etc.
-
-The details (scope, target, etc.) will be specified in the evaluation guidelines and may
-vary from one evaluation to another for the same project.
-
-14
