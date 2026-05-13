@@ -25,13 +25,13 @@ Every team member must understand these concepts before anyone writes a single l
 
 ```
                     ┌─────────────────────────────┐
-                    │   SHARED FOUNDATION          │
-                    │                               │
-                    │  TCP/IP · HTTP Lifecycle       │
-                    │  Sockets · Blocking vs Non     │
-                    │  I/O Multiplexing · CGI idea   │
-                    │  fork/exec/pipe concepts       │
-                    └──────────┬────────────────────┘
+                    │   SHARED FOUNDATION         │
+                    │                             │
+                    │  TCP/IP · HTTP Lifecycle    │
+                    │  Sockets · Blocking vs Non  │
+                    │  I/O Multiplexing · CGI idea│
+                    │  fork/exec/pipe concepts    │
+                    └──────────┬──────────────────┘
                                │
               ┌────────────────┼────────────────┐
               ▼                ▼                ▼
