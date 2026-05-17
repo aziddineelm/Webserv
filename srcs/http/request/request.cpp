@@ -4,50 +4,9 @@
 // Orthodox Canonical Form
 // ============================================================
 
-Request::Request()
-	: _state(REQUEST_LINE),
-	  _contentLength(0),
-	  _isChunked(false),
-	  _errorCode(0)
-{
-}
+Request::Request() : _state(REQUEST_LINE), _contentLength(0), _isChunked(false), _errorCode(0) {}
 
-Request::Request(const Request& other)
-	: _method(other._method),
-	  _uri(other._uri),
-	  _path(other._path),
-	  _queryString(other._queryString),
-	  _version(other._version),
-	  _headers(other._headers),
-	  _body(other._body),
-	  _state(other._state),
-	  _buffer(other._buffer),
-	  _contentLength(other._contentLength),
-	  _isChunked(other._isChunked),
-	  _errorCode(other._errorCode)
-{
-}
-
-Request& Request::operator=(const Request& other) {
-	if (this != &other) {
-		_method = other._method;
-		_uri = other._uri;
-		_path = other._path;
-		_queryString = other._queryString;
-		_version = other._version;
-		_headers = other._headers;
-		_body = other._body;
-		_state = other._state;
-		_buffer = other._buffer;
-		_contentLength = other._contentLength;
-		_isChunked = other._isChunked;
-		_errorCode = other._errorCode;
-	}
-	return *this;
-}
-
-Request::~Request() {
-}
+Request::~Request() {}
 
 // ============================================================
 // Core Interface
