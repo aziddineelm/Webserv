@@ -4,7 +4,7 @@
 #include <cerrno>     // errno
 #include <unistd.h>   // close
 #include <fcntl.h>    // fcntl, O_NONBLOCK
-#include <sys/socket.h>
+#include <sys/socket.h> // socket, AF_INET, SOCK_STREAM, SOL_SOCKET
 #include <arpa/inet.h> // htonl, htons
 
 // --------------------------------------------------------------------------
