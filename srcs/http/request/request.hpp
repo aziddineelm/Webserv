@@ -5,6 +5,7 @@
 #include <map>
 #include <cstdlib>
 #include <sstream>
+#include <cstdlib>
 
 enum ParseState {
 	REQUEST_LINE,

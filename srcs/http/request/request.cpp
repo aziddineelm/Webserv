@@ -1,9 +1,5 @@
 #include "request.hpp"
 
-// ============================================================
-// Orthodox Canonical Form
-// ============================================================
-
 Request::Request() : _state(REQUEST_LINE), _contentLength(0), _isChunked(false), _errorCode(0) {}
 
 Request::~Request() {}
@@ -15,7 +11,6 @@ Request::~Request() {}
 void Request::feed(const std::string& data) {
 	if (_state == COMPLETE || _state == ERROR)
 		return;
-
 	_buffer.append(data);
 
 	// Advance the state machine as far as possible.
@@ -209,6 +204,10 @@ bool Request::_extractHeaderBlock(std::string& headerBlock) {
 bool Request::_parseHeaderLine(const std::string& line) {
 	size_t colonPos = line.find(':');
 	if (colonPos == std::string::npos) {
+		_setError(400);
+		return false;
+	}
+	if (colonPos > 0 && std::isspace(static_cast<unsigned char>(line[colonPos - 1]))) {
 		_setError(400);
 		return false;
 	}
