@@ -334,7 +334,7 @@ The DRY helper `_parseNumber()` consolidates all `strtol` calls:
 bool Request::_parseNumber(const std::string& str, long& result, int base) {
     std::string trimmed = _trim(str);
     if (trimmed.empty()) return false;
-    char* endPtr = NULL;
+    char* endPtr = 0;
     result = std::strtol(trimmed.c_str(), &endPtr, base);
     if (endPtr == trimmed.c_str() || *endPtr != '\0' || result < 0)
         return false;
