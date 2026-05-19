@@ -3,8 +3,7 @@
 #include <cstring>     // strerror
 #include <cerrno>      // errno
 #include <unistd.h>    // close, usleep
-#include <sys/socket.h>
-#include <arpa/inet.h> // inet_ntoa
+#include <netinet/in.h> // htonl, htons
 #include <fcntl.h>     // fcntl
 #include <csignal>     // sig_atomic_t
 
@@ -22,7 +21,6 @@ Server::~Server() {
 	for (size_t i = 0; i < _sockets.size(); ++i) {
 		delete _sockets[i];
 	}
-	_sockets.clear();
 	std::cout << "[Server] All sockets cleaned up" << std::endl;
 }
 
@@ -107,9 +105,10 @@ void Server::_acceptConnection(Socket &listenSocket) {
 	}
 
 	// Log the new connection
+	uint32_t ip = ntohl(clientAddr.sin_addr.s_addr);
 	std::cout << "[Server] New client connected on port "
 			  << listenSocket.getPort()
-			  << " from " << inet_ntoa(clientAddr.sin_addr)
+			  << " from " << ((ip >> 24) & 0xFF) << "." << ((ip >> 16) & 0xFF) << "." << ((ip >> 8) & 0xFF) << "." << (ip & 0xFF)
 			  << ":" << ntohs(clientAddr.sin_port)
 			  << " (fd " << clientFd << ")" << std::endl;
 
