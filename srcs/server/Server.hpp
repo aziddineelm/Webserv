@@ -2,6 +2,7 @@
 #define SERVER_HPP
 
 #include "Socket.hpp"
+#include "EventLoop.hpp"
 #include <vector>
 
 class Server {
@@ -12,7 +13,7 @@ public:
 	// Initialize: create listening sockets for each port
 	bool	init(const std::vector<int> &ports);
 
-	// Run the main loop (Phase 1: simple accept, Phase 2: poll)
+	// Run the event loop (delegates to EventLoop)
 	void	run();
 
 	// Stop the server gracefully
@@ -20,10 +21,7 @@ public:
 
 private:
 	std::vector<Socket *>	_sockets;
-	bool					_running;
-
-	// Accept a new connection on a listening socket (Phase 1 helper)
-	void	_acceptConnection(Socket &listenSocket);
+	EventLoop				_eventLoop;
 
 	// Non-copyable
 	Server(const Server &);

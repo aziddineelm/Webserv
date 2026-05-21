@@ -11,7 +11,8 @@ NAME 		= webserv
 
 SRCS 		= srcs/main.cpp \
 			  srcs/server/Socket.cpp \
-			  srcs/server/Server.cpp
+			  srcs/server/Server.cpp \
+			  srcs/server/EventLoop.cpp
 
 OBJS 		= $(SRCS:.cpp=.o)
 
