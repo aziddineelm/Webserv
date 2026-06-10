@@ -1,6 +1,6 @@
 #include "request.hpp"
 
-Request::Request() : _state(REQUEST_LINE), _contentLength(0), _isChunked(false), _errorCode(0) {}
+Request::Request() : _state(REQUEST_LINE), _contentLength(0), _isChunked(false), _errorCode(0), _keepAlive(true) {}
 
 Request::~Request() {}
 
@@ -53,6 +53,7 @@ void Request::reset() {
 	_contentLength = 0;
 	_isChunked = false;
 	_errorCode = 0;
+	_keepAlive = true;
 }
 
 // ============================================================
@@ -77,6 +78,7 @@ const std::map<std::string, std::string> &Request::getHeaders() const {
 const std::string &Request::getBody() const { return _body; }
 int Request::getErrorCode() const { return _errorCode; }
 ParseState Request::getState() const { return _state; }
+bool Request::isKeepAlive() const { return _keepAlive; }
 
 // ============================================================
 // Private: Error + Utility
@@ -155,7 +157,7 @@ bool Request::_splitRequestLine(const std::string &line) {
 		return false;
 	}
 	if (method != "GET" && method != "POST" && method != "DELETE") {
-		_setError(400);
+		_setError(405);
 		return false;
 	}
 	if (version != "HTTP/1.1" && version != "HTTP/1.0") {
@@ -233,6 +235,7 @@ void Request::_validateHeaders() {
 			return;
 		}
 	}
+	// TODO: Do not Forget to check the client_max_body_size When Person C finished the parsing. so when the cmbs > reject.
 
 	// Parse Content-Length
 	std::map<std::string, std::string>::const_iterator clIt = _headers.find("content-length");
@@ -255,6 +258,19 @@ void Request::_validateHeaders() {
 	// Chunked takes precedence over Content-Length (RFC 2616 §4.4)
 	if (_isChunked)
 		_contentLength = 0;
+
+	// Detect Connection header (RFC 2616 §14.10)
+	std::map<std::string, std::string>::const_iterator connIt = _headers.find("connection");
+	if (connIt != _headers.end()) {
+		std::string connVal = _toLower(connIt->second);
+		if (connVal == "close")
+			_keepAlive = false;
+		else if (connVal == "keep-alive")
+			_keepAlive = true;
+	} else {
+		// Default: HTTP/1.1 = keep-alive, HTTP/1.0 = close
+		_keepAlive = (_version == "HTTP/1.1");
+	}
 }
 
 // Decide the next state based on parsed headers.
