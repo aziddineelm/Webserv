@@ -127,16 +127,11 @@ void EventLoop::_handleAccept(int listenFd) {
 			continue;
 		}
 
-		// Log connection (manual IP formatting — inet_ntoa is forbidden)
+		// Log connection (manual IP formatting)
 		uint32_t ip = ntohl(clientAddr.sin_addr.s_addr);
 		std::cout << "[EventLoop] Client connected on port " << port
-				  << " from "
-				  << ((ip >> 24) & 0xFF) << "."
-				  << ((ip >> 16) & 0xFF) << "."
-				  << ((ip >> 8) & 0xFF) << "."
-				  << (ip & 0xFF)
-				  << ":" << ntohs(clientAddr.sin_port)
-				  << " (fd " << clientFd << ")" << std::endl;
+				  << " from " << ((ip >> 24) & 0xFF) << "." << ((ip >> 16) & 0xFF) << "." << ((ip >> 8) & 0xFF) << "." << (ip & 0xFF)
+				  << ":" << ntohs(clientAddr.sin_port) << " (fd " << clientFd << ")" << std::endl;
 
 		// TODO Task 2: Add to poll set and create Client entry
 		// For Task 1: close immediately (no client tracking yet)
