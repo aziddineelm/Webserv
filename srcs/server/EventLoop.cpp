@@ -26,8 +26,6 @@ EventLoop::~EventLoop() {
 		 it != _clients.end(); ++it) {
 		close(it->second.fd);
 	}
-	_clients.clear();
-	_pollfds.clear();
 }
 
 // --------------------------------------------------------------------------
