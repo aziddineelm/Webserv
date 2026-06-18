@@ -3,6 +3,7 @@
 
 #include <string>
 #include <ctime>
+#include "../http/request/request.hpp"
 
 // --------------------------------------------------------------------------
 // FD type — determines how the event loop handles events on this FD
@@ -31,7 +32,7 @@ enum ClientState {
 struct Client {
 	int				fd;
 	ClientState		state;
-	std::string		readBuffer;
+	Request			request;		// HTTP request parser (streaming, owns its own buffer)
 	std::string		writeBuffer;
 	size_t			writeOffset;
 	time_t			lastActivity;

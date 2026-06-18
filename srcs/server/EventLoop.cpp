@@ -5,6 +5,7 @@
 #include <unistd.h>		// close
 #include <fcntl.h>		// fcntl, O_NONBLOCK
 #include <netinet/in.h>	// sockaddr_in, ntohl, ntohs
+#include <sys/socket.h>	// recv, send, accept
 #include <csignal>		// sig_atomic_t
 
 // External flag set by signal handler (defined in main.cpp)
@@ -12,6 +13,7 @@ extern volatile sig_atomic_t g_running;
 
 #define POLL_TIMEOUT_MS		1000	// Wake up every second for timeout checks
 #define CLIENT_TIMEOUT_SEC	60		// Close clients idle for 60 seconds
+#define READ_BUFFER_SIZE	8192	// Stack buffer for recv() — one read per poll cycle
 
 // --------------------------------------------------------------------------
 // Constructor / Destructor
@@ -77,14 +79,27 @@ void EventLoop::run() {
 			// --- Client FD: handle I/O events ---
 			if (revents & (POLLERR | POLLNVAL)) {
 				_handleDisconnect(fd);
+				--i;	// Element swapped in from back — re-examine this index
 				continue;
 			}
-			if (revents & POLLIN)
+			if (revents & POLLIN) {
 				_handleRead(fd);
-			if (revents & POLLOUT)
+				if (_clients.find(fd) == _clients.end()) {
+					--i;
+					continue;	// Read detected disconnect
+				}
+			}
+			if (revents & POLLOUT) {
 				_handleWrite(fd);
-			if (revents & POLLHUP)
+				if (_clients.find(fd) == _clients.end()) {
+					--i;
+					continue;
+				}
+			}
+			if (revents & POLLHUP) {
 				_handleDisconnect(fd);
+				--i;
+			}
 		}
 
 		_checkTimeouts();
@@ -133,18 +148,65 @@ void EventLoop::_handleAccept(int listenFd) {
 				  << " from " << ((ip >> 24) & 0xFF) << "." << ((ip >> 16) & 0xFF) << "." << ((ip >> 8) & 0xFF) << "." << (ip & 0xFF)
 				  << ":" << ntohs(clientAddr.sin_port) << " (fd " << clientFd << ")" << std::endl;
 
-		// TODO Task 2: Add to poll set and create Client entry
-		// For Task 1: close immediately (no client tracking yet)
-		close(clientFd);
+		// Register client: add to poll set (monitor for readable data)
+		// and create Client entry with the Request parser
+		_addPollFd(clientFd, POLLIN);
+		_clients[clientFd] = Client(clientFd, port);
 	}
 }
 
 // --------------------------------------------------------------------------
-// Event: Read from client — STUB (Task 2)
+// Event: Read from client
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleRead(int clientFd) {
-	(void)clientFd;
+	// Find the client — must exist if we got here
+	std::map<int, Client>::iterator it = _clients.find(clientFd);
+	if (it == _clients.end())
+		return;
+	Client &client = it->second;
+
+	// Single recv per poll cycle — prevents one fast client from starving others
+	char buf[READ_BUFFER_SIZE];
+	ssize_t bytesRead = recv(clientFd, buf, sizeof(buf), 0);
+
+	if (bytesRead == 0) {
+		// Client closed connection cleanly (sent FIN)
+		std::cout << "[EventLoop] Client disconnected (fd " << clientFd << ")" << std::endl;
+		_handleDisconnect(clientFd);
+		return;
+	}
+	if (bytesRead < 0) {
+		// EAGAIN/EWOULDBLOCK shouldn't happen (poll said readable), but handle gracefully
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return;
+		std::cerr << "[EventLoop] recv() error on fd " << clientFd
+				  << ": " << std::strerror(errno) << std::endl;
+		_handleDisconnect(clientFd);
+		return;
+	}
+
+	// Update activity timestamp
+	client.lastActivity = time(NULL);
+
+	// Direct-feed into Person B's streaming Request parser
+	client.request.feed(std::string(buf, bytesRead));
+
+	// Check if the parser has finished (complete request or parse error)
+	if (client.request.isComplete() || client.request.hasError()) {
+		client.state = STATE_WRITING;
+		_setPollEvents(clientFd, POLLOUT);
+
+		// Log what was parsed
+		if (client.request.isComplete()) {
+			std::cout << "[EventLoop] Request complete (fd " << clientFd << "): "
+					  << client.request.getMethod() << " "
+					  << client.request.getPath() << std::endl;
+		} else {
+			std::cerr << "[EventLoop] Request parse error (fd " << clientFd << "): "
+					  << client.request.getErrorCode() << std::endl;
+		}
+	}
 }
 
 // --------------------------------------------------------------------------
@@ -156,11 +218,13 @@ void EventLoop::_handleWrite(int clientFd) {
 }
 
 // --------------------------------------------------------------------------
-// Event: Client disconnect — STUB (Task 5)
+// Event: Client disconnect — cleanup resources
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleDisconnect(int clientFd) {
-	(void)clientFd;
+	close(clientFd);
+	_removePollFd(clientFd);
+	_clients.erase(clientFd);
 }
 
 // --------------------------------------------------------------------------
