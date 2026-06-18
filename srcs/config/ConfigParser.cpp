@@ -1,10 +1,13 @@
-// TODO: checking that error_page paths actually exist AND Throwing errors on duplicate server listen + host pairs (so bind() doesn't fail later) AND Enforce that allowed_methods strictly only accepts permutations of GET, POST, and DELETE
+// All validation TODOs completed (error_page existence, duplicate listen pairs, allowed_methods enforcement)
 #include "ConfigParser.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
 #include <cctype>
+#include <sys/stat.h>
+#include <set>
+#include <utility>
 
 // --- Exception Implementation ---
 ConfigParser::ConfigException::ConfigException(const std::string& msg) : _msg(msg) {}
@@ -210,6 +213,12 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         // Process specific location directives
         if (directive == "allowed_methods") {
             if (args.empty()) throw ConfigException("allowed_methods directive missing arguments");
+            for (size_t j = 0; j < args.size(); ++j) {
+                if (args[j] != "GET" && args[j] != "POST" && args[j] != "DELETE") {
+                    throw ConfigException("Invalid method in allowed_methods: '" + args[j] +
+                                         "' (only GET, POST, DELETE are supported)");
+                }
+            }
             newLocation.allowed_methods = args;
         } else if (directive == "root") {
             if (args.empty()) throw ConfigException("root directive missing arguments");
@@ -295,12 +304,51 @@ void ConfigParser::validate() {
     if (_servers.empty()) {
         throw ConfigException("No valid server blocks found in configuration");
     }
+
+    // Check for duplicate host + port pairs across all server blocks
+    std::set<std::pair<std::string, uint16_t> > listenPairs;
+    for (size_t i = 0; i < _servers.size(); ++i) {
+        std::pair<std::string, uint16_t> listenKey(_servers[i].host, _servers[i].listen_port);
+        if (!listenPairs.insert(listenKey).second) {
+            std::ostringstream oss;
+            oss << "Duplicate server listen address: " << _servers[i].host << ":" << _servers[i].listen_port;
+            throw ConfigException(oss.str());
+        }
+    }
+
     for (size_t i = 0; i < _servers.size(); ++i) {
         if (_servers[i].listen_port == 0) {
             throw ConfigException("Invalid listen port in server block");
         }
         if (_servers[i].root.empty()) {
             throw ConfigException("Missing root in server block");
+        }
+
+        // Validate error_page paths exist and are regular files
+        for (std::map<int, std::string>::const_iterator it = _servers[i].error_pages.begin();
+             it != _servers[i].error_pages.end(); ++it) {
+            std::string fullPath = _servers[i].root;
+            std::string errPath = it->second;
+
+            if (!fullPath.empty() && !errPath.empty()) {
+                if (fullPath[fullPath.size() - 1] == '/' && errPath[0] == '/') {
+                    fullPath += errPath.substr(1);
+                } else if (fullPath[fullPath.size() - 1] != '/' && errPath[0] != '/') {
+                    fullPath += "/" + errPath;
+                } else {
+                    fullPath += errPath;
+                }
+            } else {
+                fullPath += errPath;
+            }
+
+            struct stat buffer;
+            if (stat(fullPath.c_str(), &buffer) != 0) {
+                throw ConfigException("Error page file does not exist: " + fullPath);
+            }
+            if (!S_ISREG(buffer.st_mode)) {
+                throw ConfigException("Error page path is not a regular file: " + fullPath);
+            }
         }
     }
 }

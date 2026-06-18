@@ -1,0 +1,266 @@
+#include "CGIHandler.hpp"
+#include "ProcessSpawner.hpp"
+
+#include <unistd.h>
+#include <poll.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <signal.h>
+#include <time.h>
+
+// --- Construction / Destruction ---
+
+CGIHandler::CGIHandler()
+    : _state(CGI_IDLE), _pid(-1),
+      _stdinFd(-1), _stdoutFd(-1), _stderrFd(-1),
+      _inputPos(0), _startTime(0), _timeoutSeconds(5),
+      _exitStatus(0), _exited(false) {}
+
+CGIHandler::~CGIHandler() {
+    cleanup();
+}
+
+// --- Helper: close FD ---
+
+void CGIHandler::closeFd(int& fd) {
+    if (fd >= 0) {
+        close(fd);
+        fd = -1;
+    }
+}
+
+// --- Non-blocking API ---
+
+bool CGIHandler::start(const std::string& scriptPath,
+                       const std::string& interpreterPath,
+                       const std::vector<std::string>& env,
+                       const std::string& input,
+                       int timeoutSeconds) {
+    cleanup();
+
+    _input = input;
+    _inputPos = 0;
+    _output.clear();
+    _error.clear();
+    _exitStatus = 0;
+    _exited = false;
+    _timeoutSeconds = timeoutSeconds;
+
+    std::vector<std::string> argv;
+    if (!interpreterPath.empty()) {
+        argv.push_back(interpreterPath);
+    }
+    argv.push_back(scriptPath);
+
+    ProcessSpawner spawner;
+    _pid = spawner.spawn(argv, env, _stdinFd, _stdoutFd, _stderrFd);
+    if (_pid < 0) {
+        _error = "CGIHandler::start failed to spawn process";
+        _state = CGI_ERROR;
+        return false;
+    }
+
+    // Set all pipe FDs to non-blocking.
+    fcntl(_stdinFd, F_SETFL, O_NONBLOCK);
+    fcntl(_stdoutFd, F_SETFL, O_NONBLOCK);
+    fcntl(_stderrFd, F_SETFL, O_NONBLOCK);
+
+    _startTime = time(NULL);
+
+    // If there is no input to write, close stdin immediately.
+    if (_input.empty()) {
+        closeFd(_stdinFd);
+        _state = CGI_READING;
+    } else {
+        _state = CGI_WRITING;
+    }
+
+    return true;
+}
+
+void CGIHandler::onStdinReady() {
+    if (_stdinFd < 0 || _state == CGI_DONE || _state == CGI_ERROR) return;
+
+    if (_inputPos < _input.size()) {
+        ssize_t n = write(_stdinFd, _input.data() + _inputPos, _input.size() - _inputPos);
+        if (n > 0) {
+            _inputPos += static_cast<size_t>(n);
+        } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
+            closeFd(_stdinFd);
+            _state = CGI_READING;
+            return;
+        }
+    }
+
+    if (_inputPos >= _input.size()) {
+        closeFd(_stdinFd);
+        _state = CGI_READING;
+    }
+}
+
+void CGIHandler::onStdoutReady() {
+    if (_stdoutFd < 0 || _state == CGI_DONE || _state == CGI_ERROR) return;
+
+    char buf[4096];
+    ssize_t n = read(_stdoutFd, buf, sizeof(buf));
+    if (n > 0) {
+        _output.append(buf, static_cast<size_t>(n));
+    } else if (n == 0) {
+        // EOF — CGI closed stdout.
+        closeFd(_stdoutFd);
+        checkDone();
+    } else if (errno != EAGAIN && errno != EINTR) {
+        closeFd(_stdoutFd);
+        checkDone();
+    }
+}
+
+void CGIHandler::onStderrReady() {
+    if (_stderrFd < 0 || _state == CGI_DONE || _state == CGI_ERROR) return;
+
+    char buf[4096];
+    ssize_t n = read(_stderrFd, buf, sizeof(buf));
+    if (n > 0) {
+        _error.append(buf, static_cast<size_t>(n));
+    } else if (n == 0) {
+        closeFd(_stderrFd);
+        checkDone();
+    } else if (errno != EAGAIN && errno != EINTR) {
+        closeFd(_stderrFd);
+        checkDone();
+    }
+}
+
+bool CGIHandler::checkTimeout() {
+    if (_state == CGI_DONE || _state == CGI_ERROR || _state == CGI_IDLE) return false;
+    if (_timeoutSeconds <= 0) return false;
+
+    if ((time(NULL) - _startTime) >= _timeoutSeconds) {
+        if (_pid > 0 && !_exited) {
+            kill(_pid, SIGKILL);
+            waitpid(_pid, &_exitStatus, 0);
+            _exited = true;
+        }
+        closeFd(_stdinFd);
+        closeFd(_stdoutFd);
+        closeFd(_stderrFd);
+        _error = "CGIHandler: process timed out";
+        _state = CGI_ERROR;
+        return true;
+    }
+    return false;
+}
+
+void CGIHandler::tryReap() {
+    if (_pid > 0 && !_exited) {
+        pid_t res = waitpid(_pid, &_exitStatus, WNOHANG);
+        if (res == _pid) _exited = true;
+    }
+}
+
+void CGIHandler::checkDone() {
+    // Both stdout and stderr must be closed before we consider CGI done.
+    if (_stdoutFd >= 0 || _stderrFd >= 0) return;
+
+    // Try to reap the child process.
+    tryReap();
+    if (!_exited) {
+        // Child hasn't exited yet — do a blocking wait since pipes are closed.
+        waitpid(_pid, &_exitStatus, 0);
+        _exited = true;
+    }
+
+    _state = CGI_DONE;
+}
+
+void CGIHandler::cleanup() {
+    if (_pid > 0 && !_exited) {
+        kill(_pid, SIGKILL);
+        waitpid(_pid, &_exitStatus, 0);
+        _exited = true;
+    }
+    closeFd(_stdinFd);
+    closeFd(_stdoutFd);
+    closeFd(_stderrFd);
+    _pid = -1;
+    _state = CGI_IDLE;
+}
+
+// --- Getters ---
+
+int CGIHandler::getStdinFd() const { return _stdinFd; }
+int CGIHandler::getStdoutFd() const { return _stdoutFd; }
+int CGIHandler::getStderrFd() const { return _stderrFd; }
+CgiState CGIHandler::getState() const { return _state; }
+const std::string& CGIHandler::getOutput() const { return _output; }
+const std::string& CGIHandler::getError() const { return _error; }
+
+bool CGIHandler::succeeded() const {
+    return _state == CGI_DONE && _exited
+           && WIFEXITED(_exitStatus) && WEXITSTATUS(_exitStatus) == 0;
+}
+
+// --- Blocking API (backward-compatible wrapper for tests) ---
+
+bool CGIHandler::run(const std::string& scriptPath,
+                     const std::string& interpreterPath,
+                     const std::vector<std::string>& env,
+                     const std::string& input,
+                     std::string& output,
+                     std::string& error,
+                     int timeoutSeconds) {
+    if (!start(scriptPath, interpreterPath, env, input, timeoutSeconds)) {
+        output = _output;
+        error = _error;
+        return false;
+    }
+
+    while (_state != CGI_DONE && _state != CGI_ERROR) {
+        if (checkTimeout()) break;
+
+        struct pollfd fds[3];
+        int nfds = 0;
+        int stdinIdx = -1, stdoutIdx = -1, stderrIdx = -1;
+
+        if (_stdinFd >= 0) {
+            stdinIdx = nfds;
+            fds[nfds].fd = _stdinFd;
+            fds[nfds].events = POLLOUT;
+            fds[nfds].revents = 0;
+            ++nfds;
+        }
+        if (_stdoutFd >= 0) {
+            stdoutIdx = nfds;
+            fds[nfds].fd = _stdoutFd;
+            fds[nfds].events = POLLIN;
+            fds[nfds].revents = 0;
+            ++nfds;
+        }
+        if (_stderrFd >= 0) {
+            stderrIdx = nfds;
+            fds[nfds].fd = _stderrFd;
+            fds[nfds].events = POLLIN;
+            fds[nfds].revents = 0;
+            ++nfds;
+        }
+
+        if (nfds == 0) break;
+
+        int pollRes = poll(fds, nfds, 100);
+        if (pollRes < 0 && errno != EINTR) break;
+
+        if (stdinIdx >= 0 && (fds[stdinIdx].revents & POLLOUT))
+            onStdinReady();
+        if (stdoutIdx >= 0 && (fds[stdoutIdx].revents & (POLLIN | POLLHUP)))
+            onStdoutReady();
+        if (stderrIdx >= 0 && (fds[stderrIdx].revents & (POLLIN | POLLHUP)))
+            onStderrReady();
+
+        tryReap();
+    }
+
+    output = _output;
+    error = _error;
+    return succeeded();
+}
