@@ -177,9 +177,6 @@ void EventLoop::_handleRead(int clientFd) {
 		return;
 	}
 	if (bytesRead < 0) {
-		// EAGAIN/EWOULDBLOCK shouldn't happen (poll said readable), but handle gracefully
-		if (errno == EAGAIN || errno == EWOULDBLOCK)
-			return;
 		std::cerr << "[EventLoop] recv() error on fd " << clientFd
 				  << ": " << std::strerror(errno) << std::endl;
 		_handleDisconnect(clientFd);
