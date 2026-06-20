@@ -272,19 +272,19 @@ void Router::_generateDirListing(const std::string &dirPath, const std::string &
 
 	// Build links
 	for (size_t i = 0; i < entries.size(); ++i) {
-		std::string displayName = entries[i];
-
-		// Check if entry is a directory and add trailing slash
+		// Check if entry is a directory (cache to avoid double stat())
 		std::string fullEntryPath = dirPath;
 		if (!fullEntryPath.empty() && fullEntryPath[fullEntryPath.size() - 1] != '/')
 			fullEntryPath += "/";
 		fullEntryPath += entries[i];
+		bool isDir = _isDirectory(fullEntryPath);
 
-		if (_isDirectory(fullEntryPath))
+		std::string displayName = entries[i];
+		if (isDir)
 			displayName += "/";
 
 		oss << "<li><a href=\"" << entries[i];
-		if (_isDirectory(fullEntryPath))
+		if (isDir)
 			oss << "/";
 		oss << "\">" << displayName << "</a></li>\n";
 	}
@@ -307,8 +307,7 @@ void Router::_buildError(int code, const LocationConfig &loc, Response &res) {
 		// Try custom error page: e.g., "www/pages/errors/404.html"
 		std::ostringstream path;
 		path << loc.error_page_dir;
-		if (!loc.error_page_dir.empty()
-			&& loc.error_page_dir[loc.error_page_dir.size() - 1] != '/')
+		if (loc.error_page_dir[loc.error_page_dir.size() - 1] != '/')
 			path << "/";
 		path << code << ".html";
 		res.buildErrorPage(code, path.str());
