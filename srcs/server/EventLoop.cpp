@@ -203,6 +203,15 @@ void EventLoop::_handleRead(int clientFd) {
 			std::cerr << "[EventLoop] Request parse error (fd " << clientFd << "): "
 					  << client.request.getErrorCode() << std::endl;
 		}
+
+		// STUB RESPONSE FOR TASK 3 (Buffer Setup)
+		std::string responseBody = "<h1>Hello from Webserv!</h1>\n";
+		client.writeBuffer = "HTTP/1.1 200 OK\r\n"
+							 "Content-Type: text/html\r\n"
+							 "Content-Length: 29\r\n" // Length of responseBody
+							 "Connection: close\r\n\r\n"
+							 + responseBody;
+
 	}
 }
 
@@ -211,7 +220,36 @@ void EventLoop::_handleRead(int clientFd) {
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleWrite(int clientFd) {
-	(void)clientFd;
+	std::map<int, Client>::iterator it = _clients.find(clientFd);
+	if (it == _clients.end())
+		return;
+	Client &client = it->second;
+
+	// Calculate how many bytes are left to send
+	size_t remaining = client.writeBuffer.size() - client.writeOffset;
+	
+	// Call send() — passing the exact offset pointer
+	// Note: We do NOT check errno after send() to comply with the 42 subject
+	ssize_t bytesSent = send(clientFd, client.writeBuffer.data() + client.writeOffset, remaining, 0);
+
+	if (bytesSent < 0) {
+		std::cerr << "[EventLoop] send() error on fd " << clientFd
+				  << ": " << std::strerror(errno) << std::endl;
+		_handleDisconnect(clientFd);
+		return;
+	}
+
+	// Update offset and activity timestamp
+	client.writeOffset += bytesSent;
+	client.lastActivity = time(NULL);
+
+	// Check if the entire response has been sent
+	if (client.writeOffset >= client.writeBuffer.size()) {
+		std::cout << "[EventLoop] Response fully sent (fd " << clientFd << ")" << std::endl;
+		
+		// For Task 3, we implement "Connection: close" by simply disconnecting
+		_handleDisconnect(clientFd);
+	}
 }
 
 // --------------------------------------------------------------------------
