@@ -24,8 +24,7 @@ Router::~Router() {}
 //   5. Serve file / directory / 404
 //
 
-void Router::handleRequest(const Request &req, Response &res,
-						   const std::vector<LocationConfig> &locations) {
+void Router::handleRequest(const Request &req, Response &res, const std::vector<LocationConfig> &locations) {
 	// If the request itself has errors, respond immediately
 	if (req.hasError()) {
 		int code = req.getErrorCode();
@@ -82,10 +81,7 @@ void Router::handleRequest(const Request &req, Response &res,
 // Private: Location Matching — Longest Prefix Wins
 // ============================================================
 
-const LocationConfig *Router::_matchLocation(
-	const std::string &uri,
-	const std::vector<LocationConfig> &locations)
-{
+const LocationConfig *Router::_matchLocation( const std::string &uri, const std::vector<LocationConfig> &locations) {
 	const LocationConfig *best = NULL;
 	size_t bestLen = 0;
 
@@ -114,8 +110,7 @@ const LocationConfig *Router::_matchLocation(
 // Private: Method Enforcement
 // ============================================================
 
-bool Router::_isMethodAllowed(const std::string &method,
-							  const LocationConfig &loc) {
+bool Router::_isMethodAllowed(const std::string &method, const LocationConfig &loc) {
 	// Empty list means all methods allowed
 	if (loc.allowed_methods.empty())
 		return true;
@@ -137,8 +132,7 @@ bool Router::_isMethodAllowed(const std::string &method,
 //   /tmp/www/pouic/toto/pouet
 //
 
-std::string Router::_resolvePath(const std::string &uri,
-								 const LocationConfig &loc) {
+std::string Router::_resolvePath(const std::string &uri, const LocationConfig &loc) {
 	if (loc.root.empty())
 		return "";
 
@@ -192,8 +186,7 @@ void Router::_serveFile(const std::string &filePath, Response &res) {
 	// Build the response
 	res.setStatus(200);
 	res.setBody(oss.str());
-	res.setHeader("Content-Type",
-				  Response::getMimeType(_getExtension(filePath)));
+	res.setHeader("Content-Type", Response::getMimeType(_getExtension(filePath)));
 }
 
 // ============================================================
@@ -207,10 +200,7 @@ void Router::_serveFile(const std::string &filePath, Response &res) {
 //   4. Else → 403 Forbidden
 //
 
-void Router::_serveDirectory(const std::string &dirPath,
-							 const std::string &uri,
-							 const LocationConfig &loc,
-							 Response &res) {
+void Router::_serveDirectory(const std::string &dirPath, const std::string &uri, const LocationConfig &loc, Response &res) {
 	// 1. Redirect if no trailing slash
 	if (uri.empty() || uri[uri.size() - 1] != '/') {
 		res.buildRedirect(301, uri + "/");
@@ -244,9 +234,7 @@ void Router::_serveDirectory(const std::string &dirPath,
 // Private: Generate Directory Listing HTML (autoindex)
 // ============================================================
 
-void Router::_generateDirListing(const std::string &dirPath,
-								 const std::string &uri,
-								 Response &res) {
+void Router::_generateDirListing(const std::string &dirPath, const std::string &uri, Response &res) {
 	DIR *dir = opendir(dirPath.c_str());
 	if (!dir) {
 		res.buildErrorPage(500);

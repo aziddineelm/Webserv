@@ -2,6 +2,29 @@
 
 Request::Request() : _state(REQUEST_LINE), _contentLength(0), _isChunked(false), _errorCode(0), _keepAlive(true) {}
 
+Request::Request(const Request &other) {
+	*this = other;
+}
+
+Request &Request::operator=(const Request &other) {
+	if (this != &other) {
+		_state = other._state;
+		_contentLength = other._contentLength;
+		_isChunked = other._isChunked;
+		_errorCode = other._errorCode;
+		_keepAlive = other._keepAlive;
+		_method = other._method;
+		_uri = other._uri;
+		_path = other._path;
+		_queryString = other._queryString;
+		_version = other._version;
+		_headers = other._headers;
+		_body = other._body;
+		_buffer = other._buffer;
+	}
+	return *this;
+}
+
 Request::~Request() {}
 
 // ============================================================
