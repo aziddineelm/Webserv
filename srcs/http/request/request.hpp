@@ -5,7 +5,6 @@
 #include <map>
 #include <cstdlib>
 #include <sstream>
-#include <cstdlib>
 
 enum ParseState {
 	REQUEST_LINE,
@@ -20,6 +19,8 @@ class Request {
 
 public:
 	Request();
+	Request(const Request &other);
+	Request &operator=(const Request &other);
 	~Request();
 
 	// Core interface
@@ -39,6 +40,7 @@ public:
 	const std::string&	getBody() const;
 	int					getErrorCode() const;
 	ParseState			getState() const;
+	bool				isKeepAlive() const;
 
 private:
 	// Parsed data
@@ -56,6 +58,7 @@ private:
 	size_t			_contentLength;
 	bool			_isChunked;
 	int				_errorCode;
+	bool			_keepAlive;
 
 	// State machine steps (each does ONE thing)
 	void	_parseRequestLine();
