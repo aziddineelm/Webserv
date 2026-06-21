@@ -1,20 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>500 — webserv</title>
     <link rel="icon" type="image/png" href="/imgs/icon.png">
     <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0a0a0a;color:#e0e0e0;font-family:'Courier New',Courier,monospace;overflow:hidden}
-        .container{text-align:center;padding:2rem}
-        .code{font-size:clamp(5rem,15vw,10rem);font-weight:700;letter-spacing:-4px;color:#fff;line-height:1;position:relative}
-        .code::after{content:'';display:block;width:60px;height:2px;background:#333;margin:1.5rem auto}
-        .message{font-size:clamp(0.85rem,2vw,1.1rem);color:#555;letter-spacing:2px;text-transform:uppercase}
-        .footer{position:fixed;bottom:1.5rem;left:0;width:100%;text-align:center;font-size:0.7rem;color:#2a2a2a;letter-spacing:1px}
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden
+        }
+
+        .container {
+            text-align: center;
+            padding: 2rem
+        }
+
+        .code {
+            font-size: clamp(5rem, 15vw, 10rem);
+            font-weight: 700;
+            letter-spacing: -4px;
+            color: #fff;
+            line-height: 1;
+            position: relative
+        }
+
+        .code::after {
+            content: '';
+            display: block;
+            width: 60px;
+            height: 2px;
+            background: #333;
+            margin: 1.5rem auto
+        }
+
+        .message {
+            font-size: clamp(0.85rem, 2vw, 1.1rem);
+            color: #989494;
+            letter-spacing: 2px;
+            text-transform: uppercase
+        }
+
+        .footer {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #2a2a2a;
+            letter-spacing: 1px
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="code">500</div>
@@ -22,4 +74,5 @@
     </div>
     <div class="footer">webserv</div>
 </body>
+
 </html>

@@ -186,7 +186,7 @@ std::string Response::_generateErrorHtml(int code, const std::string &reason) {
 		<< "letter-spacing:-4px;color:#fff;line-height:1;position:relative}\n"
 		<< "        .code::after{content:'';display:block;width:60px;height:2px;"
 		<< "background:#333;margin:1.5rem auto}\n"
-		<< "        .message{font-size:clamp(0.85rem,2vw,1.1rem);color:#555;"
+		<< "        .message{font-size:clamp(0.85rem,2vw,1.1rem);color:#989494;"
 		<< "letter-spacing:2px;text-transform:uppercase}\n"
 		<< "        .footer{position:fixed;bottom:1.5rem;left:0;width:100%;"
 		<< "text-align:center;font-size:0.7rem;color:#2a2a2a;letter-spacing:1px}\n"
