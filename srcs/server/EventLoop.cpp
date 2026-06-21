@@ -215,6 +215,7 @@ void EventLoop::_handleRead(int clientFd) {
 	}
 }
 
+
 // --------------------------------------------------------------------------
 // Event: Write to client — STUB (Task 3)
 // --------------------------------------------------------------------------
@@ -247,8 +248,18 @@ void EventLoop::_handleWrite(int clientFd) {
 	if (client.writeOffset >= client.writeBuffer.size()) {
 		std::cout << "[EventLoop] Response fully sent (fd " << clientFd << ")" << std::endl;
 		
-		// For Task 3, we implement "Connection: close" by simply disconnecting
-		_handleDisconnect(clientFd);
+		if (client.request.isKeepAlive()) {
+			std::cout << "[EventLoop] Keep-Alive: resetting connection for fd " << clientFd << std::endl;
+			client.writeBuffer.clear();
+			client.writeOffset = 0;
+			client.request.reset();
+			client.state = STATE_READING;
+			client.lastActivity = time(NULL);
+			_setPollEvents(clientFd, POLLIN);
+		} else {
+			std::cout << "[EventLoop] Connection: close requested, disconnecting fd " << clientFd << std::endl;
+			_handleDisconnect(clientFd);
+		}
 	}
 }
 
@@ -261,6 +272,7 @@ void EventLoop::_handleDisconnect(int clientFd) {
 	_removePollFd(clientFd);
 	_clients.erase(clientFd);
 }
+
 
 // --------------------------------------------------------------------------
 // Poll array helpers
@@ -294,10 +306,24 @@ void EventLoop::_setPollEvents(int fd, short events) {
 	}
 }
 
+
 // --------------------------------------------------------------------------
-// Timeout check — STUB (Task 5)
+// Timeout check (Task 5)
 // --------------------------------------------------------------------------
 
 void EventLoop::_checkTimeouts() {
-	// Task 5: scan _clients, close any with (now - lastActivity) > CLIENT_TIMEOUT_SEC
+	time_t now = time(NULL);
+	std::map<int, Client>::iterator it = _clients.begin();
+	
+	while (it != _clients.end()) {
+		if (now - it->second.lastActivity > CLIENT_TIMEOUT_SEC) {
+			std::cout << "[EventLoop] Client timeout (fd " << it->first << ") after " 
+					  << CLIENT_TIMEOUT_SEC << " seconds of inactivity." << std::endl;
+			int fdToClose = it->first;
+			++it;
+			_handleDisconnect(fdToClose);
+		} else {
+			++it;
+		}
+	}
 }
