@@ -1,33 +1,55 @@
-// ...existing code...
-#include "config/ConfigParser.hpp"
+#include "server/Server.hpp"
 #include <iostream>
+#include <csignal>
+#include <cstdlib>
+#include <vector>
 
-int main(int argc, char** argv) {
-	std::string configPath = "config/default.conf";
-	if (argc > 1) {
-		configPath = argv[1];
-	}
+// --------------------------------------------------------------------------
+// Global signal flag — checked by Server::run() loop
+// --------------------------------------------------------------------------
 
-	try {
-		ConfigParser parser(configPath);
-		parser.parse();
-		parser.validate();
+volatile sig_atomic_t g_running = 1;
 
-		std::vector<ServerConfig> servers = parser.getServers();
-		std::cout << "Parsed servers: " << servers.size() << std::endl;
-		for (size_t i = 0; i < servers.size(); ++i) {
-			std::cout << "\n[Server " << i + 1 << "]" << std::endl;
-			servers[i].printConfig();
-			std::cout << "  Locations: " << servers[i].locations.size() << std::endl;
-			for (std::map<std::string, LocationContext>::const_iterator it = servers[i].locations.begin();
-				 it != servers[i].locations.end(); ++it) {
-				std::cout << "    - " << it->first << std::endl;
-			}
-		}
-	} catch (const std::exception& ex) {
-		std::cerr << "Config error: " << ex.what() << std::endl;
+static void signalHandler(int signum) {
+	(void)signum;
+	g_running = 0;
+}
+
+void	setupSignals(){
+	signal(SIGPIPE, SIG_IGN);          // Don't die on broken pipe (send to closed client)
+	signal(SIGINT, signalHandler);     // Ctrl+C → graceful shutdown
+	signal(SIGQUIT, signalHandler);    // Ctrl+\ → graceful shutdown
+}
+
+// --------------------------------------------------------------------------
+// Main
+// --------------------------------------------------------------------------
+
+int main(int argc, char **argv) {
+	(void)argc;
+	(void)argv;
+
+	// --- Signal setup ---
+	setupSignals();
+
+	// --- Port configuration ---
+	// TODO: Phase 3 — replace with Person C's config parser
+	//       e.g. ConfigParser parser(argv[1]);
+	//            std::vector<int> ports = parser.getPorts();
+	std::vector<int> ports;
+	ports.push_back(8080);
+	ports.push_back(8081);
+
+	// --- Initialize and run ---
+	Server server;
+
+	if (!server.init(ports)) {
+		std::cerr << "[main] Server initialization failed" << std::endl;
 		return 1;
 	}
 
+	server.run();
+
+	// Destructor handles cleanup (RAII)
 	return 0;
 }
