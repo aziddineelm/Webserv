@@ -1,7 +1,7 @@
 #include "ServerConfig.hpp"
 #include <iostream>
 
-LocationContext::LocationContext() : autoindex(false) {}
+LocationConfig::LocationConfig() : autoindex(false), redirect_code(0), client_max_body_size(1048576) {}
 
 ServerConfig::ServerConfig() : host("127.0.0.1"), client_max_body_size(1048576) {
     listen_ports.push_back(8080);
@@ -19,11 +19,11 @@ void ServerConfig::printConfig() const {
     std::cout << "  Max Body Size: " << client_max_body_size << std::endl;
 }
 
-const LocationContext* ServerConfig::matchLocation(const std::string& uri) const {
-    const LocationContext* best = NULL;
+const LocationConfig* ServerConfig::matchLocation(const std::string& uri) const {
+    const LocationConfig* best = NULL;
     size_t bestLen = 0;
 
-    for (std::map<std::string, LocationContext>::const_iterator it = locations.begin();
+    for (std::map<std::string, LocationConfig>::const_iterator it = locations.begin();
          it != locations.end(); ++it) {
         const std::string& prefix = it->second.path;
 
@@ -44,9 +44,9 @@ const LocationContext* ServerConfig::matchLocation(const std::string& uri) const
     return best;
 }
 
-std::vector<LocationContext> ServerConfig::getLocationList() const {
-    std::vector<LocationContext> list;
-    for (std::map<std::string, LocationContext>::const_iterator it = locations.begin();
+std::vector<LocationConfig> ServerConfig::getLocationList() const {
+    std::vector<LocationConfig> list;
+    for (std::map<std::string, LocationConfig>::const_iterator it = locations.begin();
          it != locations.end(); ++it) {
         list.push_back(it->second);
     }

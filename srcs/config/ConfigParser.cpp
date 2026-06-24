@@ -186,7 +186,7 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
 }
 
 void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end, ServerConfig& currentServer) {
-    LocationContext newLocation;
+    LocationConfig newLocation;
     
     if (it == end || *it == "{") {
         throw ConfigException("Missing path for location block");
@@ -245,8 +245,8 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         } else if (directive == "return") {
             if (args.size() < 2) throw ConfigException("return directive missing arguments");
             if (!isNumber(args[0])) throw ConfigException("Invalid return code: " + args[0]);
-            newLocation.redirect.first = std::atoi(args[0].c_str());
-            newLocation.redirect.second = args[1];
+            newLocation.redirect_code = std::atoi(args[0].c_str());
+            newLocation.redirect_url = args[1];
         } else if (directive == "cgi_extension") {
             if (args.empty()) {
                 throw ConfigException("cgi_extension directive missing arguments");
@@ -288,6 +288,10 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
     if (newLocation.index.empty()) {
         newLocation.index = currentServer.index;
     }
+    // Inherit client_max_body_size from server
+    newLocation.client_max_body_size = currentServer.client_max_body_size;
+    // Inherit error_pages from server
+    newLocation.error_pages = currentServer.error_pages;
     
     currentServer.locations[path] = newLocation;
 }

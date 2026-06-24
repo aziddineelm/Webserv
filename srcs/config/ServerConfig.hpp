@@ -9,7 +9,7 @@
 // Describes configuration for a single `location` block.
 // Contains path, allowed methods, root/alias, autoindex flag,
 // index file name, optional redirect, upload storage, and CGI settings.
-struct LocationContext {
+struct LocationConfig {
     // Location path (e.g., "/images").
     std::string path;
     // Allowed HTTP methods for this location (GET, POST, DELETE, ...).
@@ -22,8 +22,10 @@ struct LocationContext {
     bool autoindex;
     // Default index file name for this location.
     std::string index;
-    // Optional redirect as (status_code, url).
-    std::pair<int, std::string> redirect;
+    // Redirect URL (empty = no redirect).
+    std::string redirect_url;
+    // Redirect HTTP status code (0 = no redirect).
+    int redirect_code;
     // Directory where uploaded files should be stored.
     std::string upload_store;
     // File extensions handled by CGI for this location.
@@ -32,9 +34,13 @@ struct LocationContext {
     std::string cgi_path;
     // Mapping from extension to CGI handler path.
     std::map<std::string, std::string> cgi_map;
+    // Maximum allowed size for client request bodies (inherited from server).
+    size_t client_max_body_size;
+    // Mapping of HTTP status codes to custom error page paths (inherited from server).
+    std::map<int, std::string> error_pages;
 
     // Default constructor initializes sensible defaults.
-    LocationContext();
+    LocationConfig();
 };
 
 // Represents configuration for a single `server` block.
@@ -57,7 +63,7 @@ public:
     // Mapping of HTTP status codes to custom error page paths.
     std::map<int, std::string> error_pages;
     // Named locations configured under this server.
-    std::map<std::string, LocationContext> locations;
+    std::map<std::string, LocationConfig> locations;
 
     // Default constructor initializes sensible defaults.
     ServerConfig();
@@ -67,10 +73,10 @@ public:
 
     // Find the best matching location for a given URI (longest prefix match).
     // Returns NULL if no location matches.
-    const LocationContext* matchLocation(const std::string& uri) const;
+    const LocationConfig* matchLocation(const std::string& uri) const;
 
     // Get all locations as a flat vector (useful for Person B's Router).
-    std::vector<LocationContext> getLocationList() const;
+    std::vector<LocationConfig> getLocationList() const;
 };
 
 #endif
