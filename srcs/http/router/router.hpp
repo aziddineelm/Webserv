@@ -11,28 +11,7 @@
 
 #include "../request/request.hpp"
 #include "../response/response.hpp"
-
-// ============================================================
-// LocationConfig — interface contract with Person C
-// ============================================================
-
-struct LocationConfig {
-	std::string					path;				// e.g., "/", "/upload"
-	std::string					root;				// e.g., "/var/www/html"
-	std::string					index;				// e.g., "index.html"
-	bool						autoindex;			// directory listing on/off
-	std::vector<std::string>	allowed_methods;	// e.g., ["GET", "POST"]
-	std::string					redirect_url;		// "" = no redirect
-	int							redirect_code;		// 0 = no redirect
-	std::string					upload_store;		// "" = uploads not allowed
-	size_t						client_max_body_size;// bytes (default 1MB)
-	std::string					error_page_dir;		// path to custom error pages
-
-	LocationConfig()
-		: autoindex(false),
-		  redirect_code(0),
-		  client_max_body_size(1048576) {}
-};
+#include "../../config/ServerConfig.hpp"
 
 // ============================================================
 // Router — the brain that connects Request → Response
