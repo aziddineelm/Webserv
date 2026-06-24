@@ -67,7 +67,15 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		return;
 	}
 
-	// 5. Serve
+	// 5. Check for CGI dispatch
+	std::string ext = _getExtension(filePath);
+	if (!ext.empty() && loc->cgi_map.find(ext) != loc->cgi_map.end()) {
+		// TODO: Dispatch to CGIHandler (Person C will wire this up)
+		_buildError(501, *loc, res);
+		return;
+	}
+
+	// 6. Serve
 	if (_isDirectory(filePath)) {
 		_serveDirectory(filePath, req.getPath(), *loc, res);
 	} else if (_fileExists(filePath)) {
@@ -133,6 +141,26 @@ bool Router::_isMethodAllowed(const std::string &method, const LocationConfig &l
 //
 
 std::string Router::_resolvePath(const std::string &uri, const LocationConfig &loc) {
+	// Alias replaces the location prefix entirely with a different path
+	// Root appends the remainder after stripping the prefix
+	if (!loc.alias.empty()) {
+		// alias: /kapouet → /tmp/www means /kapouet/foo → /tmp/www/foo
+		std::string remainder;
+		if (uri.size() > loc.path.size())
+			remainder = uri.substr(loc.path.size());
+
+		std::string fullPath = loc.alias;
+		if (!fullPath.empty() && fullPath[fullPath.size() - 1] == '/'
+			&& !remainder.empty() && remainder[0] == '/')
+			fullPath = fullPath.substr(0, fullPath.size() - 1);
+		else if (!fullPath.empty() && fullPath[fullPath.size() - 1] != '/'
+				 && !remainder.empty() && remainder[0] != '/')
+			fullPath += "/";
+
+		fullPath += remainder;
+		return fullPath;
+	}
+
 	if (loc.root.empty())
 		return "";
 
@@ -303,14 +331,10 @@ void Router::_generateDirListing(const std::string &dirPath, const std::string &
 // ============================================================
 
 void Router::_buildError(int code, const LocationConfig &loc, Response &res) {
-	if (!loc.error_page_dir.empty()) {
-		// Try custom error page: e.g., "www/pages/errors/404.html"
-		std::ostringstream path;
-		path << loc.error_page_dir;
-		if (loc.error_page_dir[loc.error_page_dir.size() - 1] != '/')
-			path << "/";
-		path << code << ".html";
-		res.buildErrorPage(code, path.str());
+	// Check if Person C configured a custom error page for this status code
+	std::map<int, std::string>::const_iterator it = loc.error_pages.find(code);
+	if (it != loc.error_pages.end() && !it->second.empty()) {
+		res.buildErrorPage(code, it->second);
 	} else {
 		// Fallback to generated HTML
 		res.buildErrorPage(code);
