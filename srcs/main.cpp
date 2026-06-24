@@ -32,10 +32,7 @@ int main(int argc, char **argv) {
 	// --- Signal setup ---
 	setupSignals();
 
-	// --- Port configuration ---
-	// TODO: Phase 3 — replace with Person C's config parser
-	//       e.g. ConfigParser parser(argv[1]);
-	//            std::vector<int> ports = parser.getPorts();
+
 	std::vector<int> ports;
 	ports.push_back(8080);
 	ports.push_back(8081);
