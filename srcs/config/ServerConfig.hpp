@@ -42,8 +42,8 @@ struct LocationContext {
 // size limits, error pages, and a collection of `LocationContext`s.
 class ServerConfig {
 public:
-    // TCP port to listen on (e.g., 80, 8080).
-    uint16_t listen_port;
+    // TCP ports to listen on (e.g., 80, 8080). Supports multiple listen directives.
+    std::vector<uint16_t> listen_ports;
     // Host/IP to bind to (commonly "0.0.0.0" or "127.0.0.1").
     std::string host;
     // Server names (virtual host names) for this server.
@@ -64,6 +64,13 @@ public:
 
     // Utility to print the server configuration (for debugging).
     void printConfig() const;
+
+    // Find the best matching location for a given URI (longest prefix match).
+    // Returns NULL if no location matches.
+    const LocationContext* matchLocation(const std::string& uri) const;
+
+    // Get all locations as a flat vector (useful for Person B's Router).
+    std::vector<LocationContext> getLocationList() const;
 };
 
 #endif

@@ -51,6 +51,9 @@ public:
     // @return A vector of ServerConfig objects parsed from the file.
     std::vector<ServerConfig> getServers() const;
 
+    // Get unique listen ports across all servers.
+    std::vector<int> getPorts() const;
+
     // Exception type thrown for parsing and validation errors.
     class ConfigException : public std::exception {
     private:

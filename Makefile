@@ -22,7 +22,9 @@ CGI_TEST_SRCS = srcs/cgi/test_cgi_runner.cpp \
 			 srcs/cgi/CGIHandler.cpp \
 			 srcs/cgi/ProcessSpawner.cpp \
 			 srcs/cgi/EnvBuilder.cpp \
-			 srcs/http/CGIResponseParser.cpp
+			 srcs/cgi/CGIResponseParser.cpp \
+			 srcs/http/request/request.cpp \
+			 srcs/config/ServerConfig.cpp
 
 CGI_TEST_OBJS = $(CGI_TEST_SRCS:.cpp=.o)
 
