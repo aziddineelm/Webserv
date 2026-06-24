@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <sstream>
 
 namespace {
 std::string normalizeHeaderKey(const std::string& name) {
@@ -164,4 +165,44 @@ std::vector<std::string> EnvBuilder::buildFromParts(const std::string& method,
     }
 
     return build(meta);
+}
+
+std::vector<std::string> EnvBuilder::buildFromRequest(const Request& req, const ServerConfig& serverConfig) const {
+    std::ostringstream portStr;
+    if (!serverConfig.listen_ports.empty()) {
+        portStr << serverConfig.listen_ports[0];
+    }
+
+    std::string contentLength;
+    std::string contentType;
+    const std::map<std::string, std::string>& headers = req.getHeaders();
+
+    std::map<std::string, std::string>::const_iterator clIt = headers.find("content-length");
+    if (clIt != headers.end()) contentLength = clIt->second;
+
+    std::map<std::string, std::string>::const_iterator ctIt = headers.find("content-type");
+    if (ctIt != headers.end()) contentType = ctIt->second;
+
+    // Determine server_name: use first configured name, or fallback to host
+    std::string srvName;
+    if (!serverConfig.server_names.empty()) {
+        srvName = serverConfig.server_names[0];
+    } else {
+        srvName = serverConfig.host;
+    }
+
+    return buildFromParts(
+        req.getMethod(),
+        req.getUri(),
+        req.getQueryString(),
+        headers,
+        srvName,
+        portStr.str(),
+        "",             // remoteAddr — only Person A knows this from accept()
+        req.getPath(),  // scriptName
+        "",             // pathInfo — depends on CGI script path resolution
+        req.getVersion(),
+        contentLength,
+        contentType
+    );
 }

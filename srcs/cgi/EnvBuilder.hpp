@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <map>
+#include "../http/request/request.hpp"
+#include "../config/ServerConfig.hpp"
 
 // EnvBuilder constructs CGI environment variables from request
 // metadata and server/location configuration. This stub returns a
@@ -33,6 +35,10 @@ public:
                                             const std::string& serverProtocol,
                                             const std::string& contentLength,
                                             const std::string& contentType) const;
+
+    // Build environment variables directly from a Request object and server config.
+    // This allows perfect integration with the HTTP and Router layers.
+    std::vector<std::string> buildFromRequest(const Request& req, const ServerConfig& serverConfig) const;
 };
 
 #endif
