@@ -1,4 +1,5 @@
 #include "server/Server.hpp"
+#include "config/ConfigParser.hpp"
 #include <iostream>
 #include <csignal>
 #include <cstdlib>
@@ -26,26 +27,39 @@ void	setupSignals(){
 // --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
-	(void)argc;
-	(void)argv;
-
 	// --- Signal setup ---
 	setupSignals();
 
+	// --- Config file path (default or from argv) ---
+	std::string configPath = "config/default.conf";
+	if (argc > 1)
+		configPath = argv[1];
 
-	std::vector<int> ports;
-	ports.push_back(8080);
-	ports.push_back(8081);
+	// --- Parse configuration ---
+	try {
+		ConfigParser parser(configPath);
+		parser.parse();
+		parser.validate();
 
-	// --- Initialize and run ---
-	Server server;
+		std::cout << "[main] Configuration loaded from: " << configPath << std::endl;
 
-	if (!server.init(ports)) {
-		std::cerr << "[main] Server initialization failed" << std::endl;
+		// Extract unique ports from all server blocks
+		std::vector<int> ports = parser.getPorts();
+
+		// --- Initialize and run ---
+		Server server;
+
+		if (!server.init(ports)) {
+			std::cerr << "[main] Server initialization failed" << std::endl;
+			return 1;
+		}
+
+		server.run();
+	}
+	catch (const ConfigParser::ConfigException &e) {
+		std::cerr << "[main] Configuration error: " << e.what() << std::endl;
 		return 1;
 	}
-
-	server.run();
 
 	// Destructor handles cleanup (RAII)
 	return 0;
