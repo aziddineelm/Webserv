@@ -1,6 +1,6 @@
 #include "EnvBuilder.hpp"
 #include "CGIHandler.hpp"
-#include "../http/CGIResponseParser.hpp"
+#include "CGIResponseParser.hpp"
 
 #include <iostream>
 #include <map>

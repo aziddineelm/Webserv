@@ -95,6 +95,7 @@ void ConfigParser::tokenize(std::ifstream& file) {
 
 void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end) {
     ServerConfig newServer;
+    bool listenSeen = false;
     
     // Skip the '{'
     ++it;
@@ -124,17 +125,24 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
             if (directive == "listen") {
                 if (args.empty()) throw ConfigException("listen directive missing arguments");
                 std::string value = args[0];
+                uint16_t port;
                 size_t colon = value.find(':');
                 if (colon != std::string::npos) {
                     std::string host = value.substr(0, colon);
                     std::string portStr = value.substr(colon + 1);
                     if (host.empty() || !isNumber(portStr)) throw ConfigException("Invalid listen value: " + value);
                     newServer.host = host;
-                    newServer.listen_port = static_cast<uint16_t>(std::atoi(portStr.c_str()));
+                    port = static_cast<uint16_t>(std::atoi(portStr.c_str()));
                 } else {
                     if (!isNumber(value)) throw ConfigException("Invalid listen port: " + value);
-                    newServer.listen_port = static_cast<uint16_t>(std::atoi(value.c_str()));
+                    port = static_cast<uint16_t>(std::atoi(value.c_str()));
                 }
+                // Clear the default port on the first listen directive
+                if (!listenSeen) {
+                    newServer.listen_ports.clear();
+                    listenSeen = true;
+                }
+                newServer.listen_ports.push_back(port);
             }
             else if (directive == "server_name") {
                 newServer.server_names = args;
@@ -178,7 +186,7 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
 }
 
 void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end, ServerConfig& currentServer) {
-    LocationContext newLocation;
+    LocationConfig newLocation;
     
     if (it == end || *it == "{") {
         throw ConfigException("Missing path for location block");
@@ -237,8 +245,8 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         } else if (directive == "return") {
             if (args.size() < 2) throw ConfigException("return directive missing arguments");
             if (!isNumber(args[0])) throw ConfigException("Invalid return code: " + args[0]);
-            newLocation.redirect.first = std::atoi(args[0].c_str());
-            newLocation.redirect.second = args[1];
+            newLocation.redirect_code = std::atoi(args[0].c_str());
+            newLocation.redirect_url = args[1];
         } else if (directive == "cgi_extension") {
             if (args.empty()) {
                 throw ConfigException("cgi_extension directive missing arguments");
@@ -271,6 +279,19 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         throw ConfigException("Unexpected end of file inside location block");
     }
     ++it; // Skip '}'
+
+    // Inherit root from server if location doesn't specify one
+    if (newLocation.root.empty()) {
+        newLocation.root = currentServer.root;
+    }
+    // Inherit index from server if location doesn't specify one
+    if (newLocation.index.empty()) {
+        newLocation.index = currentServer.index;
+    }
+    // Inherit client_max_body_size from server
+    newLocation.client_max_body_size = currentServer.client_max_body_size;
+    // Inherit error_pages from server
+    newLocation.error_pages = currentServer.error_pages;
     
     currentServer.locations[path] = newLocation;
 }
@@ -308,17 +329,24 @@ void ConfigParser::validate() {
     // Check for duplicate host + port pairs across all server blocks
     std::set<std::pair<std::string, uint16_t> > listenPairs;
     for (size_t i = 0; i < _servers.size(); ++i) {
-        std::pair<std::string, uint16_t> listenKey(_servers[i].host, _servers[i].listen_port);
-        if (!listenPairs.insert(listenKey).second) {
-            std::ostringstream oss;
-            oss << "Duplicate server listen address: " << _servers[i].host << ":" << _servers[i].listen_port;
-            throw ConfigException(oss.str());
+        for (size_t p = 0; p < _servers[i].listen_ports.size(); ++p) {
+            std::pair<std::string, uint16_t> listenKey(_servers[i].host, _servers[i].listen_ports[p]);
+            if (!listenPairs.insert(listenKey).second) {
+                std::ostringstream oss;
+                oss << "Duplicate server listen address: " << _servers[i].host << ":" << _servers[i].listen_ports[p];
+                throw ConfigException(oss.str());
+            }
         }
     }
 
     for (size_t i = 0; i < _servers.size(); ++i) {
-        if (_servers[i].listen_port == 0) {
-            throw ConfigException("Invalid listen port in server block");
+        if (_servers[i].listen_ports.empty()) {
+            throw ConfigException("No listen ports in server block");
+        }
+        for (size_t p = 0; p < _servers[i].listen_ports.size(); ++p) {
+            if (_servers[i].listen_ports[p] == 0) {
+                throw ConfigException("Invalid listen port in server block");
+            }
         }
         if (_servers[i].root.empty()) {
             throw ConfigException("Missing root in server block");
@@ -355,4 +383,19 @@ void ConfigParser::validate() {
 
 std::vector<ServerConfig> ConfigParser::getServers() const {
     return _servers;
+}
+
+std::vector<int> ConfigParser::getPorts() const {
+    std::vector<int> ports;
+    std::set<int> seen;
+    for (size_t i = 0; i < _servers.size(); ++i) {
+        for (size_t p = 0; p < _servers[i].listen_ports.size(); ++p) {
+            int port = _servers[i].listen_ports[p];
+            if (seen.find(port) == seen.end()) {
+                seen.insert(port);
+                ports.push_back(port);
+            }
+        }
+    }
+    return ports;
 }
