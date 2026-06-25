@@ -209,42 +209,17 @@ void EventLoop::_handleRead(int clientFd) {
 					  << client.request.getErrorCode() << std::endl;
 		}
 
-		// --- VIRTUAL HOSTING MATCHING ---
+		// --- BASIC SERVER MATCHING ---
+		// (Note: Full Virtual Hosting by Host header will be done by Person B in Phase 5)
 		const ServerConfig* bestConfig = NULL;
-		std::string hostHeader = client.request.getHeader("host");
-		
-		// 1. Strip port from host header if present (e.g. "localhost:8080" -> "localhost")
-		size_t colonPos = hostHeader.find(':');
-		if (colonPos != std::string::npos) {
-			hostHeader = hostHeader.substr(0, colonPos);
-		}
-
-		// 2. Find matching server configs for this port
-		std::vector<const ServerConfig*> portMatches;
 		for (size_t i = 0; i < _configs.size(); ++i) {
 			for (size_t p = 0; p < _configs[i].listen_ports.size(); ++p) {
 				if (_configs[i].listen_ports[p] == client.listenPort) {
-					portMatches.push_back(&_configs[i]);
-					break; // Found port in this config
+					bestConfig = &_configs[i];
+					break; // Pick the first config for this port
 				}
 			}
-		}
-
-		// 3. Find exact server_name match
-		if (!portMatches.empty()) {
-			bestConfig = portMatches[0]; // Default to first match
-			for (size_t i = 0; i < portMatches.size(); ++i) {
-				const std::vector<std::string>& names = portMatches[i]->server_names;
-				bool foundName = false;
-				for (size_t n = 0; n < names.size(); ++n) {
-					if (names[n] == hostHeader) {
-						bestConfig = portMatches[i];
-						foundName = true;
-						break;
-					}
-				}
-				if (foundName) break;
-			}
+			if (bestConfig) break;
 		}
 
 		// --- ROUTING & RESPONSE BUILDING ---
@@ -268,7 +243,7 @@ void EventLoop::_handleRead(int clientFd) {
 
 
 // --------------------------------------------------------------------------
-// Event: Write to client — STUB (Task 3)
+// Event: Write to client
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleWrite(int clientFd) {
@@ -359,7 +334,7 @@ void EventLoop::_setPollEvents(int fd, short events) {
 
 
 // --------------------------------------------------------------------------
-// Timeout check (Task 5)
+// Timeout check
 // --------------------------------------------------------------------------
 
 void EventLoop::_checkTimeouts() {
