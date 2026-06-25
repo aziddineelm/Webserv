@@ -1,4 +1,5 @@
 #include "server/Server.hpp"
+#include "config/ConfigParser.hpp"
 #include <iostream>
 #include <csignal>
 #include <cstdlib>
@@ -26,29 +27,44 @@ void	setupSignals(){
 // --------------------------------------------------------------------------
 
 int main(int argc, char **argv) {
-	(void)argc;
-	(void)argv;
-
 	// --- Signal setup ---
 	setupSignals();
 
-	// --- Port configuration ---
-	// TODO: Phase 3 — replace with Person C's config parser
-	//       e.g. ConfigParser parser(argv[1]);
-	//            std::vector<int> ports = parser.getPorts();
-	std::vector<int> ports;
-	ports.push_back(8080);
-	ports.push_back(8081);
-
-	// --- Initialize and run ---
-	Server server;
-
-	if (!server.init(ports)) {
-		std::cerr << "[main] Server initialization failed" << std::endl;
+	// --- Config file path (default or from argv) ---
+	if (argc > 2) {
+		std::cerr << "Usage: " << argv[0] << " [config_file]" << std::endl;
 		return 1;
 	}
+	
+	std::string configPath = "config/default.conf";
+	if (argc == 2)
+		configPath = argv[1];
 
-	server.run();
+	// --- Parse configuration ---
+	try {
+		ConfigParser parser(configPath);
+		parser.parse();
+		parser.validate();
+
+		std::cout << "[main] Configuration loaded from: " << configPath << std::endl;
+
+		// Extract unique ports from all server blocks
+		std::vector<int> ports = parser.getPorts();
+
+		// --- Initialize and run ---
+		Server server;
+
+		if (!server.init(ports, parser.getServers())) {
+			std::cerr << "[main] Server initialization failed" << std::endl;
+			return 1;
+		}
+
+		server.run();
+	}
+	catch (const ConfigParser::ConfigException &e) {
+		std::cerr << "[main] Configuration error: " << e.what() << std::endl;
+		return 1;
+	}
 
 	// Destructor handles cleanup (RAII)
 	return 0;

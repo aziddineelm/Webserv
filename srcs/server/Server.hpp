@@ -3,6 +3,7 @@
 
 #include "Socket.hpp"
 #include "EventLoop.hpp"
+#include "../config/ServerConfig.hpp"
 #include <vector>
 
 class Server {
@@ -10,8 +11,8 @@ public:
 	Server();
 	~Server();
 
-	// Initialize: create listening sockets for each port
-	bool	init(const std::vector<int> &ports);
+	// Initialize: create listening sockets for each port and pass configs to event loop
+	bool	init(const std::vector<int> &ports, const std::vector<ServerConfig> &configs);
 
 	// Run the event loop (delegates to EventLoop)
 	void	run();
