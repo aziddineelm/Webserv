@@ -1,6 +1,13 @@
 #include "response.hpp"
 
-Response::Response() : _statusCode(200), _reasonPhrase("OK") {}
+// ============================================================
+// Orthodox Canonical Form
+// ============================================================
+
+Response::Response()
+	: _statusCode(200), _reasonPhrase("OK"),
+	  _fileOffset(0), _fileSize(0),
+	  _headersSent(false), _done(false) {}
 
 Response::Response(const Response &other) { *this = other; }
 
@@ -10,6 +17,11 @@ Response &Response::operator=(const Response &other) {
 		_reasonPhrase = other._reasonPhrase;
 		_headers = other._headers;
 		_body = other._body;
+		_filePath = other._filePath;
+		_fileOffset = other._fileOffset;
+		_fileSize = other._fileSize;
+		_headersSent = other._headersSent;
+		_done = other._done;
 	}
 	return *this;
 }
@@ -34,6 +46,17 @@ void Response::setBody(const std::string &body) {
 	_body = body;
 	std::ostringstream oss;
 	oss << _body.size();
+	_headers["Content-Length"] = oss.str();
+}
+
+// Set file-mode: store path + size, auto-set Content-Length.
+// Does NOT read the file — Person A streams it via getNextChunk().
+void Response::setFilePath(const std::string &path, size_t fileSize) {
+	_filePath = path;
+	_fileSize = fileSize;
+	_fileOffset = 0;
+	std::ostringstream oss;
+	oss << fileSize;
 	_headers["Content-Length"] = oss.str();
 }
 
@@ -64,16 +87,11 @@ void Response::buildRedirect(int code, const std::string &location) {
 }
 
 // ============================================================
-// Serialize — Response → raw HTTP bytes
+// Streaming API — Person A calls getNextChunk() in a loop
 // ============================================================
 
-// Output format (RFC 2616 §6):
-//   HTTP/1.1 200 OK\r\n
-//   Content-Type: text/html\r\n
-//   Content-Length: 45\r\n
-//   \r\n
-//   <html>...</html>
-std::string Response::serialize() const {
+// Build the raw HTTP headers string (status line + headers + blank line)
+std::string Response::getHeaders() const {
 	std::ostringstream oss;
 
 	// Status line
@@ -87,10 +105,64 @@ std::string Response::serialize() const {
 	// Blank line separating headers from body
 	oss << "\r\n";
 
-	// Body
-	oss << _body;
-
 	return oss.str();
+}
+
+// Returns the next chunk of the response.
+// Call 1: returns headers. Call 2+: returns body chunks.
+// When isDone() is true, stop calling.
+std::string Response::getNextChunk() {
+	if (_done)
+		return "";
+
+	// First call: return headers only
+	if (!_headersSent) {
+		_headersSent = true;
+		// If string mode with no body, mark done immediately
+		if (_filePath.empty() && _body.empty())
+			_done = true;
+		return getHeaders();
+	}
+
+	// String mode: body is sent in a single second call
+	if (_filePath.empty()) {
+		_done = true;
+		return _body;
+	}
+
+	// File mode: read 8KB from disk using open/seekg/close (no ifstream member)
+	std::ifstream file(_filePath.c_str(), std::ios::binary);
+	if (!file.is_open()) {
+		_done = true;
+		return "";
+	}
+	file.seekg(static_cast<std::streamoff>(_fileOffset));
+
+	char buffer[8192];
+	file.read(buffer, sizeof(buffer));
+	size_t bytesRead = static_cast<size_t>(file.gcount());
+	_fileOffset += bytesRead;
+
+	if (_fileOffset >= _fileSize || bytesRead == 0)
+		_done = true;
+
+	return std::string(buffer, bytesRead);
+}
+
+bool Response::isDone() const { return _done; }
+
+// ============================================================
+// Legacy Serialize — still works for string-mode responses
+// ============================================================
+
+// Output format (RFC 2616 §6):
+//   HTTP/1.1 200 OK\r\n
+//   Content-Type: text/html\r\n
+//   Content-Length: 45\r\n
+//   \r\n
+//   <html>...</html>
+std::string Response::serialize() const {
+	return getHeaders() + _body;
 }
 
 // ============================================================
@@ -159,6 +231,13 @@ std::string Response::getMimeType(const std::string &extension) {
 		if (extension == ".gif")  return "image/gif";
 		if (extension == ".ico")  return "image/x-icon";
 		if (extension == ".svg")  return "image/svg+xml";
+		// Video/Audio
+		if (extension == ".mp4")  return "video/mp4";
+		if (extension == ".mp3")  return "audio/mpeg";
+		if (extension == ".webm") return "video/webm";
+		// Archive
+		if (extension == ".zip")  return "application/zip";
+		if (extension == ".gz")   return "application/gzip";
 		// Default — unknown binary
 		return "application/octet-stream";
 }
@@ -206,7 +285,7 @@ std::string Response::_generateErrorHtml(int code, const std::string &reason) {
 // Read an entire file into a string.
 // Returns true on success, false if the file doesn't exist or can't be read.
 bool Response::_readFile(const std::string &path, std::string &content) {
-	std::ifstream file(path.c_str());
+	std::ifstream file(path.c_str(), std::ios::binary);
 	if (!file.is_open())
 		return false;
 
