@@ -34,6 +34,11 @@ EventLoop::~EventLoop() {
 // Setup
 // --------------------------------------------------------------------------
 
+void EventLoop::setConfigs(const std::vector<ServerConfig> &configs) {
+	_configs = configs;
+	std::cout << "[EventLoop] Loaded " << _configs.size() << " server configurations" << std::endl;
+}
+
 void EventLoop::addListenFd(int fd, int port) {
 	_addPollFd(fd, POLLIN);
 	_listenPorts[fd] = port;
@@ -204,13 +209,59 @@ void EventLoop::_handleRead(int clientFd) {
 					  << client.request.getErrorCode() << std::endl;
 		}
 
-		// STUB RESPONSE FOR TASK 3 (Buffer Setup)
-		std::string responseBody = "<h1>Hello from Webserv!</h1>\n";
-		client.writeBuffer = "HTTP/1.1 200 OK\r\n"
-							 "Content-Type: text/html\r\n"
-							 "Content-Length: 29\r\n" // Length of responseBody
-							 "Connection: close\r\n\r\n"
-							 + responseBody;
+		// --- VIRTUAL HOSTING MATCHING ---
+		const ServerConfig* bestConfig = NULL;
+		std::string hostHeader = client.request.getHeader("host");
+		
+		// 1. Strip port from host header if present (e.g. "localhost:8080" -> "localhost")
+		size_t colonPos = hostHeader.find(':');
+		if (colonPos != std::string::npos) {
+			hostHeader = hostHeader.substr(0, colonPos);
+		}
+
+		// 2. Find matching server configs for this port
+		std::vector<const ServerConfig*> portMatches;
+		for (size_t i = 0; i < _configs.size(); ++i) {
+			for (size_t p = 0; p < _configs[i].listen_ports.size(); ++p) {
+				if (_configs[i].listen_ports[p] == client.listenPort) {
+					portMatches.push_back(&_configs[i]);
+					break; // Found port in this config
+				}
+			}
+		}
+
+		// 3. Find exact server_name match
+		if (!portMatches.empty()) {
+			bestConfig = portMatches[0]; // Default to first match
+			for (size_t i = 0; i < portMatches.size(); ++i) {
+				const std::vector<std::string>& names = portMatches[i]->server_names;
+				bool foundName = false;
+				for (size_t n = 0; n < names.size(); ++n) {
+					if (names[n] == hostHeader) {
+						bestConfig = portMatches[i];
+						foundName = true;
+						break;
+					}
+				}
+				if (foundName) break;
+			}
+		}
+
+		// --- ROUTING & RESPONSE BUILDING ---
+		Response res;
+		if (bestConfig) {
+			Router router;
+			router.handleRequest(client.request, res, bestConfig->getLocationList());
+		} else {
+			// Fallback if absolutely no config matches (shouldn't happen)
+			res.buildErrorPage(500);
+		}
+
+		// Honor Keep-Alive request
+		res.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
+
+		// Serialize to write buffer
+		client.writeBuffer = res.serialize();
 
 	}
 }

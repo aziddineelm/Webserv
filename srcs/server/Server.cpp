@@ -19,7 +19,8 @@ Server::~Server() {
 // Public: init
 // --------------------------------------------------------------------------
 
-bool Server::init(const std::vector<int> &ports) {
+bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig> &configs) {
+	_eventLoop.setConfigs(configs);
 	if (ports.empty()) {
 		std::cerr << "[Server] Error: no ports to listen on" << std::endl;
 		return false;

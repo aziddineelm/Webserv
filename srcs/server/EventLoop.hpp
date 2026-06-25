@@ -2,6 +2,9 @@
 #define EVENTLOOP_HPP
 
 #include "Client.hpp"
+#include "../config/ServerConfig.hpp"
+#include "../http/router/router.hpp"
+#include "../http/response/response.hpp"
 #include <vector>
 #include <map>
 #include <poll.h>
@@ -12,6 +15,7 @@ public:
 	~EventLoop();
 
 	// Setup — register listening sockets before run()
+	void	setConfigs(const std::vector<ServerConfig> &configs);
 	void	addListenFd(int fd, int port);
 
 	// Main loop — blocks until stop() or signal
@@ -22,6 +26,7 @@ private:
 	std::vector<struct pollfd>	_pollfds;
 	std::map<int, Client>		_clients;		// clientFd → Client
 	std::map<int, int>			_listenPorts;	// listenFd → port
+	std::vector<ServerConfig>	_configs;		// All server configurations
 	bool						_running;
 
 	// Event handlers

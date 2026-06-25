@@ -4,35 +4,10 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <fstream>
-#include <sstream>
 
 #include "../request/request.hpp"
 #include "../response/response.hpp"
-
-// ============================================================
-// LocationConfig — interface contract with Person C
-// ============================================================
-
-struct LocationConfig {
-	std::string					path;				// e.g., "/", "/upload"
-	std::string					root;				// e.g., "/var/www/html"
-	std::string					index;				// e.g., "index.html"
-	bool						autoindex;			// directory listing on/off
-	std::vector<std::string>	allowed_methods;	// e.g., ["GET", "POST"]
-	std::string					redirect_url;		// "" = no redirect
-	int							redirect_code;		// 0 = no redirect
-	std::string					upload_store;		// "" = uploads not allowed
-	size_t						client_max_body_size;// bytes (default 1MB)
-	std::string					error_page_dir;		// path to custom error pages
-
-	LocationConfig()
-		: autoindex(false),
-		  redirect_code(0),
-		  client_max_body_size(1048576) {}
-};
+#include "../../config/ServerConfig.hpp"
 
 // ============================================================
 // Router — the brain that connects Request → Response
@@ -52,8 +27,7 @@ public:
 
 private:
 	// Step 1: Find the matching location (longest prefix)
-	const LocationConfig	*_matchLocation(const std::string &uri,
-						const std::vector<LocationConfig> &locations);
+	const LocationConfig	*_matchLocation(const std::string &uri, const std::vector<LocationConfig> &locations);
 
 	// Step 2: Check if the HTTP method is allowed
 	bool	_isMethodAllowed(const std::string &method,
@@ -71,7 +45,15 @@ private:
 	void	_generateDirListing(const std::string &dirPath,
 								const std::string &uri, Response &res);
 
-	// Build error page using location's custom dir or fallback
+	// Step 5: POST/DELETE handlers
+	void	_handlePost(const Request &req, const LocationConfig &loc, Response &res);
+	void	_handleDelete(const Request &req, const LocationConfig &loc, Response &res);
+
+	// POST sub-handlers (SRP — thin orchestrator pattern)
+	void	_saveRawBody(const Request &req, const LocationConfig &loc, Response &res);
+	void	_saveMultipart(const Request &req, const LocationConfig &loc, const std::string &contentType, Response &res);
+
+	// Build error page using location's custom pages or fallback
 	void	_buildError(int code, const LocationConfig &loc, Response &res);
 
 	// Utility
@@ -79,6 +61,10 @@ private:
 	static bool			_fileExists(const std::string &path);
 	static bool			_isDirectory(const std::string &path);
 	static bool			_hasPathTraversal(const std::string &path);
+
+	// Multipart helpers
+	static std::string	_extractBoundary(const std::string &contentType);
+	static std::string	_extractFilenameFromHeaders(const std::string &headers);
 };
 
 #endif

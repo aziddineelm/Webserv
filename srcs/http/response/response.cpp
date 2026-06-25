@@ -1,6 +1,13 @@
 #include "response.hpp"
 
-Response::Response() : _statusCode(200), _reasonPhrase("OK") {}
+// ============================================================
+// Orthodox Canonical Form
+// ============================================================
+
+Response::Response()
+	: _statusCode(200), _reasonPhrase("OK"),
+	  _fileOffset(0), _fileSize(0),
+	  _headersSent(false), _done(false) {}
 
 Response::Response(const Response &other) { *this = other; }
 
@@ -10,6 +17,11 @@ Response &Response::operator=(const Response &other) {
 		_reasonPhrase = other._reasonPhrase;
 		_headers = other._headers;
 		_body = other._body;
+		_filePath = other._filePath;
+		_fileOffset = other._fileOffset;
+		_fileSize = other._fileSize;
+		_headersSent = other._headersSent;
+		_done = other._done;
 	}
 	return *this;
 }
@@ -34,6 +46,17 @@ void Response::setBody(const std::string &body) {
 	_body = body;
 	std::ostringstream oss;
 	oss << _body.size();
+	_headers["Content-Length"] = oss.str();
+}
+
+// Set file-mode: store path + size, auto-set Content-Length.
+// Does NOT read the file — Person A streams it via getNextChunk().
+void Response::setFilePath(const std::string &path, size_t fileSize) {
+	_filePath = path;
+	_fileSize = fileSize;
+	_fileOffset = 0;
+	std::ostringstream oss;
+	oss << fileSize;
 	_headers["Content-Length"] = oss.str();
 }
 
@@ -64,16 +87,11 @@ void Response::buildRedirect(int code, const std::string &location) {
 }
 
 // ============================================================
-// Serialize — Response → raw HTTP bytes
+// Streaming API — Person A calls getNextChunk() in a loop
 // ============================================================
 
-// Output format (RFC 2616 §6):
-//   HTTP/1.1 200 OK\r\n
-//   Content-Type: text/html\r\n
-//   Content-Length: 45\r\n
-//   \r\n
-//   <html>...</html>
-std::string Response::serialize() const {
+// Build the raw HTTP headers string (status line + headers + blank line)
+std::string Response::getHeaders() const {
 	std::ostringstream oss;
 
 	// Status line
@@ -87,10 +105,64 @@ std::string Response::serialize() const {
 	// Blank line separating headers from body
 	oss << "\r\n";
 
-	// Body
-	oss << _body;
-
 	return oss.str();
+}
+
+// Returns the next chunk of the response.
+// Call 1: returns headers. Call 2+: returns body chunks.
+// When isDone() is true, stop calling.
+std::string Response::getNextChunk() {
+	if (_done)
+		return "";
+
+	// First call: return headers only
+	if (!_headersSent) {
+		_headersSent = true;
+		// If string mode with no body, mark done immediately
+		if (_filePath.empty() && _body.empty())
+			_done = true;
+		return getHeaders();
+	}
+
+	// String mode: body is sent in a single second call
+	if (_filePath.empty()) {
+		_done = true;
+		return _body;
+	}
+
+	// File mode: read 8KB from disk using open/seekg/close (no ifstream member)
+	std::ifstream file(_filePath.c_str(), std::ios::binary);
+	if (!file.is_open()) {
+		_done = true;
+		return "";
+	}
+	file.seekg(static_cast<std::streamoff>(_fileOffset));
+
+	char buffer[8192];
+	file.read(buffer, sizeof(buffer));
+	size_t bytesRead = static_cast<size_t>(file.gcount());
+	_fileOffset += bytesRead;
+
+	if (_fileOffset >= _fileSize || bytesRead == 0)
+		_done = true;
+
+	return std::string(buffer, bytesRead);
+}
+
+bool Response::isDone() const { return _done; }
+
+// ============================================================
+// Legacy Serialize — still works for string-mode responses
+// ============================================================
+
+// Output format (RFC 2616 §6):
+//   HTTP/1.1 200 OK\r\n
+//   Content-Type: text/html\r\n
+//   Content-Length: 45\r\n
+//   \r\n
+//   <html>...</html>
+std::string Response::serialize() const {
+	return getHeaders() + _body;
 }
 
 // ============================================================
@@ -159,6 +231,13 @@ std::string Response::getMimeType(const std::string &extension) {
 		if (extension == ".gif")  return "image/gif";
 		if (extension == ".ico")  return "image/x-icon";
 		if (extension == ".svg")  return "image/svg+xml";
+		// Video/Audio
+		if (extension == ".mp4")  return "video/mp4";
+		if (extension == ".mp3")  return "audio/mpeg";
+		if (extension == ".webm") return "video/webm";
+		// Archive
+		if (extension == ".zip")  return "application/zip";
+		if (extension == ".gz")   return "application/gzip";
 		// Default — unknown binary
 		return "application/octet-stream";
 }
@@ -170,123 +249,43 @@ std::string Response::getMimeType(const std::string &extension) {
 std::string Response::_generateErrorHtml(int code, const std::string &reason) {
 	std::ostringstream oss;
 	oss << "<!DOCTYPE html>\n"
-			<< "<html>\n"
-			<< "<head>\n"
-			<< "    <title>webserv</title>\n"
-			<< "    <link rel=\"icon\" type=\"image/png\" href=\"/imgs/icon.png\">\n"
-			<< "    <style>\n"
-			<< "        @import url('https://fonts.googleapis.com/css?family=Fira+Mono:400');\n"
-			<< "\n"
-			<< "        body{\n"
-			<< "            display: flex;\n"
-			<< "            width: 100vw;\n"
-			<< "            height: 100vh;\n"
-			<< "            align-items: center;\n"
-			<< "            justify-content: center;\n"
-			<< "            margin: 0;\n"
-			<< "            background: #131313;\n"
-			<< "            color: #fff;\n"
-			<< "            font-size: 96px;\n"
-			<< "            font-family: 'Fira Mono', monospace;\n"
-			<< "            letter-spacing: -7px;\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        p {\n"
-			<< "            font-size: 24px;\n"
-			<< "            letter-spacing: -1px;\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        footer {\n"
-			<< "            position: absolute;\n"
-			<< "            bottom: 0;\n"
-			<< "            width: 100%;\n"
-			<< "            height: 30px;\n"
-			<< "            background-color: #131313;\n"
-			<< "            color: #fff;\n"
-			<< "            font-size: 12px;\n"
-			<< "            font-family: 'Fira Mono', monospace;\n"
-			<< "            letter-spacing: -1px;\n"
-			<< "            text-align: center;\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        div{\n"
-			<< "            animation: glitch 1s linear infinite;\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        @keyframes glitch{\n"
-			<< "            2%,64%{\n"
-			<< "                transform: translate(2px,0) skew(0deg);\n"
-			<< "            }\n"
-			<< "            4%,60%{\n"
-			<< "                transform: translate(-2px,0) skew(0deg);\n"
-			<< "            }\n"
-			<< "            62%{\n"
-			<< "                transform: translate(0,0) skew(5deg);\n"
-			<< "            }\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        div:before,\n"
-			<< "        div:after{\n"
-			<< "            content: attr(title);\n"
-			<< "            position: absolute;\n"
-			<< "            left: 0;\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        div:before{\n"
-			<< "            animation: glitchTop 1s linear infinite;\n"
-			<< "            clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%);\n"
-			<< "            -webkit-clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%);\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        @keyframes glitchTop{\n"
-			<< "            2%,64%{\n"
-			<< "                transform: translate(2px,-2px);\n"
-			<< "            }\n"
-			<< "            4%,60%{\n"
-			<< "                transform: translate(-2px,2px);\n"
-			<< "            }\n"
-			<< "            62%{\n"
-			<< "                transform: translate(13px,-1px) skew(-13deg);\n"
-			<< "            }\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        div:after{\n"
-			<< "            animation: glitchBotom 1.5s linear infinite;\n"
-			<< "            clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%);\n"
-			<< "            -webkit-clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%);\n"
-			<< "        }\n"
-			<< "\n"
-			<< "        @keyframes glitchBotom{\n"
-			<< "            2%,64%{\n"
-			<< "                transform: translate(-2px,0);\n"
-			<< "            }\n"
-			<< "            4%,60%{\n"
-			<< "                transform: translate(-2px,0);\n"
-			<< "            }\n"
-			<< "            62%{\n"
-			<< "                transform: translate(-22px,5px) skew(21deg);\n"
-			<< "            }\n"
-			<< "        }\n"
-			<< "    </style>\n"
-			<< "</head>\n"
-			<< "<body>\n"
-			<< "<div title=\"" << code << "\">" << code << "</div>\n"
-			<< "<span> | </span>\n"
-			<< "<p>\n"
-			<< "    " << reason << "\n"
-			<< "</p>\n"
-			<< "</body>\n"
-			<< "<footer>\n"
-			<< "    webserv v1.0\n"
-			<< "</footer>\n"
-			<< "</html>\n";
+		<< "<html lang=\"en\">\n"
+		<< "<head>\n"
+		<< "    <meta charset=\"UTF-8\">\n"
+		<< "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+		<< "    <title>" << code << " — webserv</title>\n"
+		<< "    <link rel=\"icon\" type=\"image/png\" href=\"/imgs/icon.png\">\n"
+		<< "    <style>\n"
+		<< "        *{margin:0;padding:0;box-sizing:border-box}\n"
+		<< "        body{display:flex;align-items:center;justify-content:center;"
+		<< "min-height:100vh;background:#0a0a0a;color:#e0e0e0;"
+		<< "font-family:'Courier New',Courier,monospace;overflow:hidden}\n"
+		<< "        .container{text-align:center;padding:2rem}\n"
+		<< "        .code{font-size:clamp(5rem,15vw,10rem);font-weight:700;"
+		<< "letter-spacing:-4px;color:#fff;line-height:1;position:relative}\n"
+		<< "        .code::after{content:'';display:block;width:60px;height:2px;"
+		<< "background:#333;margin:1.5rem auto}\n"
+		<< "        .message{font-size:clamp(0.85rem,2vw,1.1rem);color:#989494;"
+		<< "letter-spacing:2px;text-transform:uppercase}\n"
+		<< "        .footer{position:fixed;bottom:1.5rem;left:0;width:100%;"
+		<< "text-align:center;font-size:0.7rem;color:#2a2a2a;letter-spacing:1px}\n"
+		<< "    </style>\n"
+		<< "</head>\n"
+		<< "<body>\n"
+		<< "    <div class=\"container\">\n"
+		<< "        <div class=\"code\">" << code << "</div>\n"
+		<< "        <div class=\"message\">" << reason << "</div>\n"
+		<< "    </div>\n"
+		<< "    <div class=\"footer\">webserv</div>\n"
+		<< "</body>\n"
+		<< "</html>\n";
 	return oss.str();
 }
 
 // Read an entire file into a string.
 // Returns true on success, false if the file doesn't exist or can't be read.
 bool Response::_readFile(const std::string &path, std::string &content) {
-	std::ifstream file(path.c_str());
+	std::ifstream file(path.c_str(), std::ios::binary);
 	if (!file.is_open())
 		return false;
 

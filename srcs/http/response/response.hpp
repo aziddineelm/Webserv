@@ -19,11 +19,19 @@ public:
 	void	setHeader(const std::string &key, const std::string &value);
 	void	setBody(const std::string &body);
 
+	// File streaming — sets file mode instead of loading into RAM
+	void	setFilePath(const std::string &path, size_t fileSize);
+
 	// Convenience builders
 	void	buildErrorPage(int code, const std::string &filePath = "");
 	void	buildRedirect(int code, const std::string &location);
 
-	// Serialize — turn the Response into raw bytes
+	// Streaming API — Person A calls these in a loop
+	std::string	getHeaders() const;
+	std::string	getNextChunk();
+	bool		isDone() const;
+
+	// Legacy serialize — still works for string-mode responses
 	std::string	serialize() const;
 
 	// Getters
@@ -40,6 +48,13 @@ private:
 	std::string		_reasonPhrase;
 	std::map<std::string, std::string>	_headers;
 	std::string		_body;
+
+	// File streaming state (no ifstream member — stays OCF copyable)
+	std::string		_filePath;
+	size_t			_fileOffset;
+	size_t			_fileSize;
+	bool			_headersSent;
+	bool			_done;
 
 	// Fallback error page + file reader
 	static std::string	_generateErrorHtml(int code, const std::string &reason);
