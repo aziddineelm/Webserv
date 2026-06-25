@@ -31,8 +31,13 @@ int main(int argc, char **argv) {
 	setupSignals();
 
 	// --- Config file path (default or from argv) ---
+	if (argc > 2) {
+		std::cerr << "Usage: " << argv[0] << " [config_file]" << std::endl;
+		return 1;
+	}
+	
 	std::string configPath = "config/default.conf";
-	if (argc > 1)
+	if (argc == 2)
 		configPath = argv[1];
 
 	// --- Parse configuration ---
@@ -49,7 +54,7 @@ int main(int argc, char **argv) {
 		// --- Initialize and run ---
 		Server server;
 
-		if (!server.init(ports)) {
+		if (!server.init(ports, parser.getServers())) {
 			std::cerr << "[main] Server initialization failed" << std::endl;
 			return 1;
 		}
