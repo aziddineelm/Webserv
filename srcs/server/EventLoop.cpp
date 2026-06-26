@@ -223,20 +223,20 @@ void EventLoop::_handleRead(int clientFd) {
 		}
 
 		// --- ROUTING & RESPONSE BUILDING ---
-		Response res;
 		if (bestConfig) {
 			Router router;
-			router.handleRequest(client.request, res, bestConfig->getLocationList());
+			router.handleRequest(client.request, client.response, bestConfig->getLocationList());
 		} else {
 			// Fallback if absolutely no config matches (shouldn't happen)
-			res.buildErrorPage(500);
+			client.response.buildErrorPage(500);
 		}
 
 		// Honor Keep-Alive request
-		res.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
+		client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
 
-		// Serialize to write buffer
-		client.writeBuffer = res.serialize();
+		// Prime the pump: load the first chunk (HTTP headers) into the write buffer
+		client.writeBuffer = client.response.getNextChunk();
+		client.writeOffset = 0;
 
 	}
 }
@@ -256,7 +256,6 @@ void EventLoop::_handleWrite(int clientFd) {
 	size_t remaining = client.writeBuffer.size() - client.writeOffset;
 	
 	// Call send() — passing the exact offset pointer
-	// Note: We do NOT check errno after send() to comply with the 42 subject
 	ssize_t bytesSent = send(clientFd, client.writeBuffer.data() + client.writeOffset, remaining, 0);
 
 	if (bytesSent < 0) {
@@ -270,8 +269,15 @@ void EventLoop::_handleWrite(int clientFd) {
 	client.writeOffset += bytesSent;
 	client.lastActivity = time(NULL);
 
-	// Check if the entire response has been sent
+	// Check if the current buffer chunk has been fully sent
 	if (client.writeOffset >= client.writeBuffer.size()) {
+		// If there is more data to send (file streaming), load the next chunk
+		if (!client.response.isDone()) {
+			client.writeBuffer = client.response.getNextChunk();
+			client.writeOffset = 0;
+			return; // Wait for next POLLOUT cycle
+		}
+
 		std::cout << "[EventLoop] Response fully sent (fd " << clientFd << ")" << std::endl;
 		
 		if (client.request.isKeepAlive()) {
@@ -279,6 +285,7 @@ void EventLoop::_handleWrite(int clientFd) {
 			client.writeBuffer.clear();
 			client.writeOffset = 0;
 			client.request.reset();
+			client.response = Response(); // Reset response for next request
 			client.state = STATE_READING;
 			client.lastActivity = time(NULL);
 			_setPollEvents(clientFd, POLLIN);
