@@ -20,6 +20,10 @@ extern volatile sig_atomic_t g_running;
 // --------------------------------------------------------------------------
 
 EventLoop::EventLoop() : _running(false) {
+	_epollFd = epoll_create(1024);
+	if (_epollFd < 0) {
+		std::cerr << "[EventLoop] epoll_create() error: " << std::strerror(errno) << std::endl;
+	}
 }
 
 EventLoop::~EventLoop() {
@@ -27,6 +31,9 @@ EventLoop::~EventLoop() {
 	for (std::map<int, Client>::iterator it = _clients.begin();
 		 it != _clients.end(); ++it) {
 		close(it->second.fd);
+	}
+	if (_epollFd >= 0) {
+		close(_epollFd);
 	}
 }
 
@@ -40,7 +47,7 @@ void EventLoop::setConfigs(const std::vector<ServerConfig> &configs) {
 }
 
 void EventLoop::addListenFd(int fd, int port) {
-	_addPollFd(fd, POLLIN);
+	_addEpollFd(fd, EPOLLIN);
 	_listenPorts[fd] = port;
 	std::cout << "[EventLoop] Registered listener fd=" << fd
 			  << " port=" << port << std::endl;
@@ -51,59 +58,49 @@ void EventLoop::addListenFd(int fd, int port) {
 // --------------------------------------------------------------------------
 
 void EventLoop::run() {
+	if (_epollFd < 0) return;
 	_running = true;
 	std::cout << "[EventLoop] Running... (press Ctrl+C to stop)" << std::endl;
 
-	while (_running && g_running) {
-		int ready = poll(&_pollfds[0], _pollfds.size(), POLL_TIMEOUT_MS);
+	const int MAX_EVENTS = 1024;
+	struct epoll_event events[MAX_EVENTS];
 
-		if (ready < 0) {
+	while (_running && g_running) {
+		int numEvents = epoll_wait(_epollFd, events, MAX_EVENTS, POLL_TIMEOUT_MS);
+
+		if (numEvents < 0) {
 			if (errno == EINTR)
-				continue;	// Signal interrupted poll — just retry
-			std::cerr << "[EventLoop] poll() error: "
+				continue;	// Signal interrupted epoll — just retry
+			std::cerr << "[EventLoop] epoll_wait() error: "
 					  << std::strerror(errno) << std::endl;
 			break;
 		}
 
-		// Process events on ready FDs
-		for (size_t i = 0; i < _pollfds.size() && ready > 0; ++i) {
-			if (_pollfds[i].revents == 0)
-				continue;
-			--ready;
-
-			int fd = _pollfds[i].fd;
-			short revents = _pollfds[i].revents;
+		// Process active events
+		for (int i = 0; i < numEvents; ++i) {
+			int fd = events[i].data.fd;
+			uint32_t revents = events[i].events;
 
 			// --- Listener FD: accept new connections ---
 			if (_listenPorts.find(fd) != _listenPorts.end()) {
-				if (revents & POLLIN)
+				if (revents & EPOLLIN)
 					_handleAccept(fd);
 				continue;
 			}
 
 			// --- Client FD: handle I/O events ---
-			if (revents & (POLLERR | POLLNVAL)) {
+			if (revents & (EPOLLERR | EPOLLHUP)) {
 				_handleDisconnect(fd);
-				--i;	// Element swapped in from back — re-examine this index
 				continue;
 			}
-			if (revents & POLLIN) {
+			if (revents & EPOLLIN) {
 				_handleRead(fd);
 				if (_clients.find(fd) == _clients.end()) {
-					--i;
 					continue;	// Read detected disconnect
 				}
 			}
-			if (revents & POLLOUT) {
+			if (revents & EPOLLOUT) {
 				_handleWrite(fd);
-				if (_clients.find(fd) == _clients.end()) {
-					--i;
-					continue;
-				}
-			}
-			if (revents & POLLHUP) {
-				_handleDisconnect(fd);
-				--i;
 			}
 		}
 
@@ -153,9 +150,9 @@ void EventLoop::_handleAccept(int listenFd) {
 				  << " from " << ((ip >> 24) & 0xFF) << "." << ((ip >> 16) & 0xFF) << "." << ((ip >> 8) & 0xFF) << "." << (ip & 0xFF)
 				  << ":" << ntohs(clientAddr.sin_port) << " (fd " << clientFd << ")" << std::endl;
 
-		// Register client: add to poll set (monitor for readable data)
+		// Register client: add to epoll set (monitor for readable data)
 		// and create Client entry with the Request parser
-		_addPollFd(clientFd, POLLIN);
+		_addEpollFd(clientFd, EPOLLIN);
 		_clients[clientFd] = Client(clientFd, port);
 	}
 }
@@ -197,7 +194,7 @@ void EventLoop::_handleRead(int clientFd) {
 	// Check if the parser has finished (complete request or parse error)
 	if (client.request.isComplete() || client.request.hasError()) {
 		client.state = STATE_WRITING;
-		_setPollEvents(clientFd, POLLOUT);
+		_setEpollEvents(clientFd, EPOLLOUT);
 
 		// Log what was parsed
 		if (client.request.isComplete()) {
@@ -288,7 +285,7 @@ void EventLoop::_handleWrite(int clientFd) {
 			client.response = Response(); // Reset response for next request
 			client.state = STATE_READING;
 			client.lastActivity = time(NULL);
-			_setPollEvents(clientFd, POLLIN);
+			_setEpollEvents(clientFd, EPOLLIN);
 		} else {
 			std::cout << "[EventLoop] Connection: close requested, disconnecting fd " << clientFd << std::endl;
 			_handleDisconnect(clientFd);
@@ -301,8 +298,8 @@ void EventLoop::_handleWrite(int clientFd) {
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleDisconnect(int clientFd) {
+	_removeEpollFd(clientFd);
 	close(clientFd);
-	_removePollFd(clientFd);
 	_clients.erase(clientFd);
 }
 
@@ -311,31 +308,27 @@ void EventLoop::_handleDisconnect(int clientFd) {
 // Poll array helpers
 // --------------------------------------------------------------------------
 
-void EventLoop::_addPollFd(int fd, short events) {
-	struct pollfd pfd;
-	pfd.fd = fd;
-	pfd.events = events;
-	pfd.revents = 0;
-	_pollfds.push_back(pfd);
-}
-
-void EventLoop::_removePollFd(int fd) {
-	for (size_t i = 0; i < _pollfds.size(); ++i) {
-		if (_pollfds[i].fd == fd) {
-			// Swap with last element and pop — avoids O(n) shift
-			_pollfds[i] = _pollfds.back();
-			_pollfds.pop_back();
-			return;
-		}
+void EventLoop::_addEpollFd(int fd, uint32_t events) {
+	struct epoll_event ev;
+	ev.events = events;
+	ev.data.fd = fd;
+	if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+		std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_ADD) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
 	}
 }
 
-void EventLoop::_setPollEvents(int fd, short events) {
-	for (size_t i = 0; i < _pollfds.size(); ++i) {
-		if (_pollfds[i].fd == fd) {
-			_pollfds[i].events = events;
-			return;
-		}
+void EventLoop::_removeEpollFd(int fd) {
+	if (epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL) == -1) {
+		std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_DEL) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
+	}
+}
+
+void EventLoop::_setEpollEvents(int fd, uint32_t events) {
+	struct epoll_event ev;
+	ev.events = events;
+	ev.data.fd = fd;
+	if (epoll_ctl(_epollFd, EPOLL_CTL_MOD, fd, &ev) == -1) {
+		std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_MOD) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
 	}
 }
 

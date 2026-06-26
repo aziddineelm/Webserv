@@ -7,7 +7,7 @@
 #include "../http/response/response.hpp"
 #include <vector>
 #include <map>
-#include <poll.h>
+#include <sys/epoll.h>
 
 class EventLoop {
 public:
@@ -23,7 +23,7 @@ public:
 	void	stop();
 
 private:
-	std::vector<struct pollfd>	_pollfds;
+	int							_epollFd;
 	std::map<int, Client>		_clients;		// clientFd → Client
 	std::map<int, int>			_listenPorts;	// listenFd → port
 	std::vector<ServerConfig>	_configs;		// All server configurations
@@ -35,10 +35,10 @@ private:
 	void	_handleWrite(int clientFd);
 	void	_handleDisconnect(int clientFd);
 
-	// Poll array management
-	void	_addPollFd(int fd, short events);
-	void	_removePollFd(int fd);
-	void	_setPollEvents(int fd, short events);
+	// epoll management
+	void	_addEpollFd(int fd, uint32_t events);
+	void	_removeEpollFd(int fd);
+	void	_setEpollEvents(int fd, uint32_t events);
 
 	// Timeout scanning
 	void	_checkTimeouts();
