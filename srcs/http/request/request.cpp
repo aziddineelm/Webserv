@@ -1,6 +1,15 @@
 #include "request.hpp"
+#include <fstream>
+#include <unistd.h>
 
-Request::Request() : _state(REQUEST_LINE), _contentLength(0), _isChunked(false), _errorCode(0), _keepAlive(true) {}
+// ============================================================
+// Orthodox Canonical Form
+// ============================================================
+
+Request::Request()
+	: _bodyBytesWritten(0),
+	  _state(REQUEST_LINE), _contentLength(0),
+	  _isChunked(false), _errorCode(0), _keepAlive(true) {}
 
 Request::Request(const Request &other) {
 	*this = other;
@@ -21,11 +30,16 @@ Request &Request::operator=(const Request &other) {
 		_headers = other._headers;
 		_body = other._body;
 		_buffer = other._buffer;
+		_bodyFilePath = other._bodyFilePath;
+		_bodyBytesWritten = other._bodyBytesWritten;
 	}
 	return *this;
 }
 
-Request::~Request() {}
+Request::~Request() {
+	// RAII cleanup of temp body file
+	_cleanupTempFile();
+}
 
 // ============================================================
 // Core Interface
@@ -65,6 +79,8 @@ bool Request::hasError() const { return _state == ERROR; }
 // Clear parsed data for keep-alive reuse.
 // Does NOT clear _buffer — leftover bytes belong to the next request.
 void Request::reset() {
+	// Clean up temp body file if it exists
+	_cleanupTempFile();
 	_method.clear();
 	_uri.clear();
 	_path.clear();
@@ -72,6 +88,7 @@ void Request::reset() {
 	_version.clear();
 	_headers.clear();
 	_body.clear();
+	_bodyBytesWritten = 0;
 	_state = REQUEST_LINE;
 	_contentLength = 0;
 	_isChunked = false;
@@ -99,6 +116,8 @@ const std::map<std::string, std::string> &Request::getHeaders() const {
  	return _headers;
 }
 const std::string &Request::getBody() const { return _body; }
+const std::string &Request::getBodyFilePath() const { return _bodyFilePath; }
+size_t Request::getBodyBytesWritten() const { return _bodyBytesWritten; }
 int Request::getErrorCode() const { return _errorCode; }
 ParseState Request::getState() const { return _state; }
 bool Request::isKeepAlive() const { return _keepAlive; }
@@ -140,6 +159,26 @@ bool Request::_parseNumber(const std::string &str, long &result, int base) {
 	if (endPtr == trimmed.c_str() || *endPtr != '\0' || result < 0)
 		return false;
 	return true;
+}
+
+// ============================================================
+// Private: Body-to-Disk Helpers
+// ============================================================
+
+// Generate a unique temp file path using PID + static counter
+std::string Request::_generateTempPath() {
+	static unsigned long counter = 0;
+	std::ostringstream oss;
+	oss << "/tmp/webserv_body_" << getpid() << "_" << counter++;
+	return oss.str();
+}
+
+// Delete the temp file if it exists
+void Request::_cleanupTempFile() {
+	if (!_bodyFilePath.empty()) {
+		unlink(_bodyFilePath.c_str());
+		_bodyFilePath.clear();
+	}
 }
 
 // ============================================================
@@ -258,7 +297,6 @@ void Request::_validateHeaders() {
 			return;
 		}
 	}
-	// TODO: Do not Forget to check the client_max_body_size When Person C finished the parsing. so when the cmbs > reject.
 
 	// Parse Content-Length
 	std::map<std::string, std::string>::const_iterator clIt = _headers.find("content-length");
@@ -387,16 +425,37 @@ void Request::_parseHeaders() {
 	_decideBodyState();
 }
 
-// Step 3: Parse body — read exactly _contentLength bytes
+// Step 3: Parse body — write data to temp file on disk
 void Request::_parseBody() {
-	if (_buffer.size() >= _contentLength) {
-		_body = _buffer.substr(0, _contentLength);
-		_buffer.erase(0, _contentLength);
-		_state = COMPLETE;
+	// Determine how much to write this call
+	size_t remaining = _contentLength - _bodyBytesWritten;
+	size_t available = _buffer.size();
+	size_t toWrite = (available < remaining) ? available : remaining;
+
+	if (toWrite == 0)
+		return;
+
+	// Create temp file on first write (unique name using pid + static counter)
+	if (_bodyFilePath.empty())
+		_bodyFilePath = _generateTempPath();
+
+	// Append chunk to temp file — never accumulate full body in RAM
+	std::ofstream out(_bodyFilePath.c_str(), std::ios::binary | std::ios::app);
+	if (!out.is_open()) {
+		_setError(500);
+		return;
 	}
+	out.write(_buffer.c_str(), toWrite);
+	out.close();
+
+	_buffer.erase(0, toWrite);
+	_bodyBytesWritten += toWrite;
+
+	if (_bodyBytesWritten >= _contentLength)
+		_state = COMPLETE;
 }
 
-// Step 4: Parse chunked body — read chunks until size 0
+// Step 4: Parse chunked body — read chunks until size 0, write to disk
 void Request::_parseChunkedBody() {
 	while (true) {
 		// Find chunk size line
@@ -430,8 +489,21 @@ void Request::_parseChunkedBody() {
 		if (_buffer.size() < totalNeeded)
 			return;
 
-		// Extract chunk data and consume
-		_body.append(_buffer, pos + 2, static_cast<size_t>(chunkSize));
+		// Create temp file on first write
+		if (_bodyFilePath.empty())
+			_bodyFilePath = _generateTempPath();
+
+		// Write chunk data directly from buffer — no intermediate string
+		size_t csz = static_cast<size_t>(chunkSize);
+		std::ofstream out(_bodyFilePath.c_str(), std::ios::binary | std::ios::app);
+		if (!out.is_open()) {
+			_setError(500);
+			return;
+		}
+		out.write(_buffer.c_str() + pos + 2, csz);
+		out.close();
+
+		_bodyBytesWritten += csz;
 		_buffer.erase(0, totalNeeded);
 	}
 }

@@ -4,10 +4,6 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <fstream>
-#include <sstream>
 
 #include "../request/request.hpp"
 #include "../response/response.hpp"
@@ -31,8 +27,7 @@ public:
 
 private:
 	// Step 1: Find the matching location (longest prefix)
-	const LocationConfig	*_matchLocation(const std::string &uri,
-						const std::vector<LocationConfig> &locations);
+	const LocationConfig	*_matchLocation(const std::string &uri, const std::vector<LocationConfig> &locations);
 
 	// Step 2: Check if the HTTP method is allowed
 	bool	_isMethodAllowed(const std::string &method,
@@ -50,7 +45,15 @@ private:
 	void	_generateDirListing(const std::string &dirPath,
 								const std::string &uri, Response &res);
 
-	// Build error page using location's custom dir or fallback
+	// Step 5: POST/DELETE handlers
+	void	_handlePost(const Request &req, const LocationConfig &loc, Response &res);
+	void	_handleDelete(const Request &req, const LocationConfig &loc, Response &res);
+
+	// POST sub-handlers (SRP — thin orchestrator pattern)
+	void	_saveRawBody(const Request &req, const LocationConfig &loc, Response &res);
+	void	_saveMultipart(const Request &req, const LocationConfig &loc, const std::string &contentType, Response &res);
+
+	// Build error page using location's custom pages or fallback
 	void	_buildError(int code, const LocationConfig &loc, Response &res);
 
 	// Utility
@@ -58,6 +61,10 @@ private:
 	static bool			_fileExists(const std::string &path);
 	static bool			_isDirectory(const std::string &path);
 	static bool			_hasPathTraversal(const std::string &path);
+
+	// Multipart helpers
+	static std::string	_extractBoundary(const std::string &contentType);
+	static std::string	_extractFilenameFromHeaders(const std::string &headers);
 };
 
 #endif

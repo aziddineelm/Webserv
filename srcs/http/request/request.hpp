@@ -29,6 +29,7 @@ public:
 	bool	hasError() const;
 	void	reset();
 
+
 	// Getters
 	const std::string&	getMethod() const;
 	const std::string&	getUri() const;
@@ -38,6 +39,8 @@ public:
 	std::string			getHeader(const std::string& key) const;
 	const std::map<std::string, std::string>&	getHeaders() const;
 	const std::string&	getBody() const;
+	const std::string&	getBodyFilePath() const;
+	size_t				getBodyBytesWritten() const;
 	int					getErrorCode() const;
 	ParseState			getState() const;
 	bool				isKeepAlive() const;
@@ -51,6 +54,10 @@ private:
 	std::string		_version;
 	std::map<std::string, std::string>	_headers;
 	std::string		_body;
+
+	// Body-to-disk state (Phase 4 — prevents OOM on large uploads)
+	std::string		_bodyFilePath;
+	size_t			_bodyBytesWritten;
 
 	// Parser state
 	ParseState		_state;
@@ -75,6 +82,10 @@ private:
 	bool	_parseHeaderLine(const std::string& line);
 	void	_validateHeaders();
 	void	_decideBodyState();
+
+	// Body-to-disk helpers
+	std::string	_generateTempPath();
+	void		_cleanupTempFile();
 
 	// Error
 	void	_setError(int code);
