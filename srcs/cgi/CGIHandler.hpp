@@ -32,13 +32,24 @@ public:
 
     // --- Non-blocking API (for main event loop integration) ---
 
-    // Start the CGI process. Returns true on success.
+    // Start the CGI process with an in-memory body string.
+    // Suitable for small POST bodies. Returns true on success.
     // After this call, use getFd methods to register with poll().
     bool start(const std::string& scriptPath,
                const std::string& interpreterPath,
                const std::vector<std::string>& env,
                const std::string& input,
                int timeoutSeconds = 5);
+
+    // Start the CGI process, streaming the POST body from a file on disk.
+    // This avoids loading the entire body into RAM, preventing OOM on
+    // large uploads (e.g. 5GB video files).
+    // Pass an empty bodyFilePath to skip body input entirely.
+    bool startFromFile(const std::string& scriptPath,
+                       const std::string& interpreterPath,
+                       const std::vector<std::string>& env,
+                       const std::string& bodyFilePath,
+                       int timeoutSeconds = 5);
 
     // Called by the main loop when poll() reports stdinFd is writable.
     void onStdinReady();
@@ -89,10 +100,12 @@ private:
     int _stdoutFd;
     int _stderrFd;
 
-    std::string _input;
+    std::string _input;      // In-memory body buffer (small bodies or current chunk)
     size_t _inputPos;
     std::string _output;
     std::string _error;
+
+    int _bodyFileFd;         // FD for streaming body from temp file (-1 if unused)
 
     time_t _startTime;
     int _timeoutSeconds;
