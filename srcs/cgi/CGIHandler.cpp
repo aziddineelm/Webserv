@@ -8,13 +8,15 @@
 #include <errno.h>
 #include <signal.h>
 #include <time.h>
+#include <sys/stat.h>
 
 // --- Construction / Destruction ---
 
 CGIHandler::CGIHandler()
     : _state(CGI_IDLE), _pid(-1),
       _stdinFd(-1), _stdoutFd(-1), _stderrFd(-1),
-      _inputPos(0), _startTime(0), _timeoutSeconds(5),
+      _inputPos(0), _bodyFileFd(-1),
+      _startTime(0), _timeoutSeconds(5),
       _exitStatus(0), _exited(false) {}
 
 CGIHandler::~CGIHandler() {
@@ -41,6 +43,7 @@ bool CGIHandler::start(const std::string& scriptPath,
 
     _input = input;
     _inputPos = 0;
+    _bodyFileFd = -1;
     _output.clear();
     _error.clear();
     _exitStatus = 0;
@@ -79,21 +82,102 @@ bool CGIHandler::start(const std::string& scriptPath,
     return true;
 }
 
+bool CGIHandler::startFromFile(const std::string& scriptPath,
+                               const std::string& interpreterPath,
+                               const std::vector<std::string>& env,
+                               const std::string& bodyFilePath,
+                               int timeoutSeconds) {
+    cleanup();
+
+    _input.clear();
+    _inputPos = 0;
+    _bodyFileFd = -1;
+    _output.clear();
+    _error.clear();
+    _exitStatus = 0;
+    _exited = false;
+    _timeoutSeconds = timeoutSeconds;
+
+    // Open the body file for streaming if a path was provided.
+    if (!bodyFilePath.empty()) {
+        struct stat st;
+        if (stat(bodyFilePath.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
+            _error = "CGIHandler::startFromFile: body file not found";
+            _state = CGI_ERROR;
+            return false;
+        }
+        _bodyFileFd = open(bodyFilePath.c_str(), O_RDONLY);
+        if (_bodyFileFd < 0) {
+            _error = "CGIHandler::startFromFile: failed to open body file";
+            _state = CGI_ERROR;
+            return false;
+        }
+    }
+
+    std::vector<std::string> argv;
+    if (!interpreterPath.empty()) {
+        argv.push_back(interpreterPath);
+    }
+    argv.push_back(scriptPath);
+
+    ProcessSpawner spawner;
+    _pid = spawner.spawn(argv, env, _stdinFd, _stdoutFd, _stderrFd);
+    if (_pid < 0) {
+        closeFd(_bodyFileFd);
+        _error = "CGIHandler::startFromFile failed to spawn process";
+        _state = CGI_ERROR;
+        return false;
+    }
+
+    // Set all pipe FDs to non-blocking.
+    fcntl(_stdinFd, F_SETFL, O_NONBLOCK);
+    fcntl(_stdoutFd, F_SETFL, O_NONBLOCK);
+    fcntl(_stderrFd, F_SETFL, O_NONBLOCK);
+
+    _startTime = time(NULL);
+
+    // If there is no body file, close stdin immediately.
+    if (_bodyFileFd < 0) {
+        closeFd(_stdinFd);
+        _state = CGI_READING;
+    } else {
+        _state = CGI_WRITING;
+    }
+
+    return true;
+}
+
 void CGIHandler::onStdinReady() {
     if (_stdinFd < 0 || _state == CGI_DONE || _state == CGI_ERROR) return;
 
+    // If the in-memory buffer is exhausted, try to refill from the body file.
+    if (_bodyFileFd >= 0 && _inputPos >= _input.size()) {
+        char buf[8192];
+        ssize_t bytesRead = read(_bodyFileFd, buf, sizeof(buf));
+        if (bytesRead > 0) {
+            _input.assign(buf, static_cast<size_t>(bytesRead));
+            _inputPos = 0;
+        } else {
+            // EOF or read error — done reading from the body file.
+            closeFd(_bodyFileFd);
+        }
+    }
+
+    // Write current chunk to CGI's stdin pipe.
     if (_inputPos < _input.size()) {
         ssize_t n = write(_stdinFd, _input.data() + _inputPos, _input.size() - _inputPos);
         if (n > 0) {
             _inputPos += static_cast<size_t>(n);
         } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
             closeFd(_stdinFd);
+            closeFd(_bodyFileFd);
             _state = CGI_READING;
             return;
         }
     }
 
-    if (_inputPos >= _input.size()) {
+    // All data written: both the in-memory buffer is empty and the file is done.
+    if (_inputPos >= _input.size() && _bodyFileFd < 0) {
         closeFd(_stdinFd);
         _state = CGI_READING;
     }
@@ -183,6 +267,7 @@ void CGIHandler::cleanup() {
     closeFd(_stdinFd);
     closeFd(_stdoutFd);
     closeFd(_stderrFd);
+    closeFd(_bodyFileFd);
     _pid = -1;
     _state = CGI_IDLE;
 }

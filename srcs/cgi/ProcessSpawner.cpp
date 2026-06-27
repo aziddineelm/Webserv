@@ -45,9 +45,11 @@ int ProcessSpawner::spawn(const std::vector<std::string>& argv,
 
     if (pid == 0) {
         // Child: wire up stdin/stdout/stderr and exec.
-        dup2(inPipe[0], STDIN_FILENO);
-        dup2(outPipe[1], STDOUT_FILENO);
-        dup2(errPipe[1], STDERR_FILENO);
+        if (dup2(inPipe[0], STDIN_FILENO) == -1
+            || dup2(outPipe[1], STDOUT_FILENO) == -1
+            || dup2(errPipe[1], STDERR_FILENO) == -1) {
+            _exit(1);
+        }
 
         close(inPipe[0]);
         close(inPipe[1]);
@@ -82,7 +84,13 @@ int ProcessSpawner::spawn(const std::vector<std::string>& argv,
         size_t lastSlash = absScript.rfind('/');
         if (lastSlash != std::string::npos) {
             std::string scriptDir = absScript.substr(0, lastSlash);
-            if (!scriptDir.empty()) chdir(scriptDir.c_str());
+            if (!scriptDir.empty()) {
+                if (chdir(scriptDir.c_str()) != 0) {
+                    // Non-fatal: script may still work without chdir.
+                    // stderr is already redirected to the parent's pipe.
+                    write(STDERR_FILENO, "CGI: chdir failed\n", 18);
+                }
+            }
         }
 
         execve(argvC[0], &argvC[0], &envC[0]);
