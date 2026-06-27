@@ -20,6 +20,10 @@ extern volatile sig_atomic_t g_running;
 // --------------------------------------------------------------------------
 
 EventLoop::EventLoop() : _running(false) {
+	_epollFd = epoll_create(1024);
+	if (_epollFd < 0) {
+		std::cerr << "[EventLoop] epoll_create() error: " << std::strerror(errno) << std::endl;
+	}
 }
 
 EventLoop::~EventLoop() {
@@ -27,6 +31,9 @@ EventLoop::~EventLoop() {
 	for (std::map<int, Client>::iterator it = _clients.begin();
 		 it != _clients.end(); ++it) {
 		close(it->second.fd);
+	}
+	if (_epollFd >= 0) {
+		close(_epollFd);
 	}
 }
 
@@ -40,7 +47,7 @@ void EventLoop::setConfigs(const std::vector<ServerConfig> &configs) {
 }
 
 void EventLoop::addListenFd(int fd, int port) {
-	_addPollFd(fd, POLLIN);
+	_addEpollFd(fd, EPOLLIN);
 	_listenPorts[fd] = port;
 	std::cout << "[EventLoop] Registered listener fd=" << fd
 			  << " port=" << port << std::endl;
@@ -51,59 +58,49 @@ void EventLoop::addListenFd(int fd, int port) {
 // --------------------------------------------------------------------------
 
 void EventLoop::run() {
+	if (_epollFd < 0) return;
 	_running = true;
 	std::cout << "[EventLoop] Running... (press Ctrl+C to stop)" << std::endl;
 
-	while (_running && g_running) {
-		int ready = poll(&_pollfds[0], _pollfds.size(), POLL_TIMEOUT_MS);
+	const int MAX_EVENTS = 1024;
+	struct epoll_event events[MAX_EVENTS];
 
-		if (ready < 0) {
+	while (_running && g_running) {
+		int numEvents = epoll_wait(_epollFd, events, MAX_EVENTS, POLL_TIMEOUT_MS);
+
+		if (numEvents < 0) {
 			if (errno == EINTR)
-				continue;	// Signal interrupted poll — just retry
-			std::cerr << "[EventLoop] poll() error: "
+				continue;	// Signal interrupted epoll — just retry
+			std::cerr << "[EventLoop] epoll_wait() error: "
 					  << std::strerror(errno) << std::endl;
 			break;
 		}
 
-		// Process events on ready FDs
-		for (size_t i = 0; i < _pollfds.size() && ready > 0; ++i) {
-			if (_pollfds[i].revents == 0)
-				continue;
-			--ready;
-
-			int fd = _pollfds[i].fd;
-			short revents = _pollfds[i].revents;
+		// Process active events
+		for (int i = 0; i < numEvents; ++i) {
+			int fd = events[i].data.fd;
+			uint32_t revents = events[i].events;
 
 			// --- Listener FD: accept new connections ---
 			if (_listenPorts.find(fd) != _listenPorts.end()) {
-				if (revents & POLLIN)
+				if (revents & EPOLLIN)
 					_handleAccept(fd);
 				continue;
 			}
 
 			// --- Client FD: handle I/O events ---
-			if (revents & (POLLERR | POLLNVAL)) {
+			if (revents & (EPOLLERR | EPOLLHUP)) {
 				_handleDisconnect(fd);
-				--i;	// Element swapped in from back — re-examine this index
 				continue;
 			}
-			if (revents & POLLIN) {
+			if (revents & EPOLLIN) {
 				_handleRead(fd);
 				if (_clients.find(fd) == _clients.end()) {
-					--i;
 					continue;	// Read detected disconnect
 				}
 			}
-			if (revents & POLLOUT) {
+			if (revents & EPOLLOUT) {
 				_handleWrite(fd);
-				if (_clients.find(fd) == _clients.end()) {
-					--i;
-					continue;
-				}
-			}
-			if (revents & POLLHUP) {
-				_handleDisconnect(fd);
-				--i;
 			}
 		}
 
@@ -153,9 +150,9 @@ void EventLoop::_handleAccept(int listenFd) {
 				  << " from " << ((ip >> 24) & 0xFF) << "." << ((ip >> 16) & 0xFF) << "." << ((ip >> 8) & 0xFF) << "." << (ip & 0xFF)
 				  << ":" << ntohs(clientAddr.sin_port) << " (fd " << clientFd << ")" << std::endl;
 
-		// Register client: add to poll set (monitor for readable data)
+		// Register client: add to epoll set (monitor for readable data)
 		// and create Client entry with the Request parser
-		_addPollFd(clientFd, POLLIN);
+		_addEpollFd(clientFd, EPOLLIN);
 		_clients[clientFd] = Client(clientFd, port);
 	}
 }
@@ -197,7 +194,7 @@ void EventLoop::_handleRead(int clientFd) {
 	// Check if the parser has finished (complete request or parse error)
 	if (client.request.isComplete() || client.request.hasError()) {
 		client.state = STATE_WRITING;
-		_setPollEvents(clientFd, POLLOUT);
+		_setEpollEvents(clientFd, EPOLLOUT);
 
 		// Log what was parsed
 		if (client.request.isComplete()) {
@@ -209,66 +206,41 @@ void EventLoop::_handleRead(int clientFd) {
 					  << client.request.getErrorCode() << std::endl;
 		}
 
-		// --- VIRTUAL HOSTING MATCHING ---
+		// --- BASIC SERVER MATCHING ---
+		// (Note: Full Virtual Hosting by Host header will be done by Person B in Phase 5)
 		const ServerConfig* bestConfig = NULL;
-		std::string hostHeader = client.request.getHeader("host");
-		
-		// 1. Strip port from host header if present (e.g. "localhost:8080" -> "localhost")
-		size_t colonPos = hostHeader.find(':');
-		if (colonPos != std::string::npos) {
-			hostHeader = hostHeader.substr(0, colonPos);
-		}
-
-		// 2. Find matching server configs for this port
-		std::vector<const ServerConfig*> portMatches;
 		for (size_t i = 0; i < _configs.size(); ++i) {
 			for (size_t p = 0; p < _configs[i].listen_ports.size(); ++p) {
 				if (_configs[i].listen_ports[p] == client.listenPort) {
-					portMatches.push_back(&_configs[i]);
-					break; // Found port in this config
+					bestConfig = &_configs[i];
+					break; // Pick the first config for this port
 				}
 			}
-		}
-
-		// 3. Find exact server_name match
-		if (!portMatches.empty()) {
-			bestConfig = portMatches[0]; // Default to first match
-			for (size_t i = 0; i < portMatches.size(); ++i) {
-				const std::vector<std::string>& names = portMatches[i]->server_names;
-				bool foundName = false;
-				for (size_t n = 0; n < names.size(); ++n) {
-					if (names[n] == hostHeader) {
-						bestConfig = portMatches[i];
-						foundName = true;
-						break;
-					}
-				}
-				if (foundName) break;
-			}
+			if (bestConfig) break;
 		}
 
 		// --- ROUTING & RESPONSE BUILDING ---
-		Response res;
 		if (bestConfig) {
 			Router router;
-			router.handleRequest(client.request, res, bestConfig->getLocationList());
+			router.handleRequest(client.request, client.response, bestConfig->getLocationList());
 		} else {
 			// Fallback if absolutely no config matches (shouldn't happen)
-			res.buildErrorPage(500);
+			client.response.buildErrorPage(500);
 		}
 
 		// Honor Keep-Alive request
-		res.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
+		client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
 
-		// Serialize to write buffer
-		client.writeBuffer = res.serialize();
+		// Prime the pump: load the first chunk (HTTP headers) into the write buffer
+		client.writeBuffer = client.response.getNextChunk();
+		client.writeOffset = 0;
 
 	}
 }
 
 
 // --------------------------------------------------------------------------
-// Event: Write to client — STUB (Task 3)
+// Event: Write to client
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleWrite(int clientFd) {
@@ -281,7 +253,6 @@ void EventLoop::_handleWrite(int clientFd) {
 	size_t remaining = client.writeBuffer.size() - client.writeOffset;
 	
 	// Call send() — passing the exact offset pointer
-	// Note: We do NOT check errno after send() to comply with the 42 subject
 	ssize_t bytesSent = send(clientFd, client.writeBuffer.data() + client.writeOffset, remaining, 0);
 
 	if (bytesSent < 0) {
@@ -295,8 +266,15 @@ void EventLoop::_handleWrite(int clientFd) {
 	client.writeOffset += bytesSent;
 	client.lastActivity = time(NULL);
 
-	// Check if the entire response has been sent
+	// Check if the current buffer chunk has been fully sent
 	if (client.writeOffset >= client.writeBuffer.size()) {
+		// If there is more data to send (file streaming), load the next chunk
+		if (!client.response.isDone()) {
+			client.writeBuffer = client.response.getNextChunk();
+			client.writeOffset = 0;
+			return; // Wait for next POLLOUT cycle
+		}
+
 		std::cout << "[EventLoop] Response fully sent (fd " << clientFd << ")" << std::endl;
 		
 		if (client.request.isKeepAlive()) {
@@ -304,9 +282,10 @@ void EventLoop::_handleWrite(int clientFd) {
 			client.writeBuffer.clear();
 			client.writeOffset = 0;
 			client.request.reset();
+			client.response = Response(); // Reset response for next request
 			client.state = STATE_READING;
 			client.lastActivity = time(NULL);
-			_setPollEvents(clientFd, POLLIN);
+			_setEpollEvents(clientFd, EPOLLIN);
 		} else {
 			std::cout << "[EventLoop] Connection: close requested, disconnecting fd " << clientFd << std::endl;
 			_handleDisconnect(clientFd);
@@ -319,8 +298,8 @@ void EventLoop::_handleWrite(int clientFd) {
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleDisconnect(int clientFd) {
+	_removeEpollFd(clientFd);
 	close(clientFd);
-	_removePollFd(clientFd);
 	_clients.erase(clientFd);
 }
 
@@ -329,37 +308,33 @@ void EventLoop::_handleDisconnect(int clientFd) {
 // Poll array helpers
 // --------------------------------------------------------------------------
 
-void EventLoop::_addPollFd(int fd, short events) {
-	struct pollfd pfd;
-	pfd.fd = fd;
-	pfd.events = events;
-	pfd.revents = 0;
-	_pollfds.push_back(pfd);
-}
-
-void EventLoop::_removePollFd(int fd) {
-	for (size_t i = 0; i < _pollfds.size(); ++i) {
-		if (_pollfds[i].fd == fd) {
-			// Swap with last element and pop — avoids O(n) shift
-			_pollfds[i] = _pollfds.back();
-			_pollfds.pop_back();
-			return;
-		}
+void EventLoop::_addEpollFd(int fd, uint32_t events) {
+	struct epoll_event ev;
+	ev.events = events;
+	ev.data.fd = fd;
+	if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+		std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_ADD) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
 	}
 }
 
-void EventLoop::_setPollEvents(int fd, short events) {
-	for (size_t i = 0; i < _pollfds.size(); ++i) {
-		if (_pollfds[i].fd == fd) {
-			_pollfds[i].events = events;
-			return;
-		}
+void EventLoop::_removeEpollFd(int fd) {
+	if (epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL) == -1) {
+		std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_DEL) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
+	}
+}
+
+void EventLoop::_setEpollEvents(int fd, uint32_t events) {
+	struct epoll_event ev;
+	ev.events = events;
+	ev.data.fd = fd;
+	if (epoll_ctl(_epollFd, EPOLL_CTL_MOD, fd, &ev) == -1) {
+		std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_MOD) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
 	}
 }
 
 
 // --------------------------------------------------------------------------
-// Timeout check (Task 5)
+// Timeout check
 // --------------------------------------------------------------------------
 
 void EventLoop::_checkTimeouts() {

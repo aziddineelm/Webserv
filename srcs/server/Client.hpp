@@ -4,6 +4,7 @@
 #include <string>
 #include <ctime>
 #include "../http/request/request.hpp"
+#include "../http/response/response.hpp"
 
 // --------------------------------------------------------------------------
 // FD type — determines how the event loop handles events on this FD
@@ -33,6 +34,7 @@ struct Client {
 	int				fd;
 	ClientState		state;
 	Request			request;		// HTTP request parser (streaming, owns its own buffer)
+	Response		response;		// HTTP response stream
 	std::string		writeBuffer;
 	size_t			writeOffset;
 	time_t			lastActivity;
