@@ -1,6 +1,9 @@
 #include "request.hpp"
 #include <fstream>
 #include <unistd.h>
+#include <sstream>
+#include <cstdlib>
+#include <cctype>
 
 // ============================================================
 // Orthodox Canonical Form

@@ -3,7 +3,6 @@
 
 #include <string>
 #include <vector>
-#include <map>
 
 #include "../request/request.hpp"
 #include "../response/response.hpp"

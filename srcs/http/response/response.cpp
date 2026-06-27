@@ -1,4 +1,6 @@
 #include "response.hpp"
+#include <sstream>
+#include <fstream>
 
 // ============================================================
 // Orthodox Canonical Form
