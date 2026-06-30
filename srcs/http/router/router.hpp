@@ -36,34 +36,8 @@ private:
 	std::string	_resolvePath(const std::string &uri,
 							 const LocationConfig &loc);
 
-	// Step 4: Serve different resource types
-	void	_serveFile(const std::string &filePath, Response &res);
-	void	_serveDirectory(const std::string &dirPath,
-							const std::string &uri,
-							const LocationConfig &loc, Response &res);
-	void	_generateDirListing(const std::string &dirPath,
-								const std::string &uri, Response &res);
-
-	// Step 5: POST/DELETE handlers
-	void	_handlePost(const Request &req, const LocationConfig &loc, Response &res);
+	// Step 5: DELETE handler
 	void	_handleDelete(const Request &req, const LocationConfig &loc, Response &res);
-
-	// POST sub-handlers (SRP — thin orchestrator pattern)
-	void	_saveRawBody(const Request &req, const LocationConfig &loc, Response &res);
-	void	_saveMultipart(const Request &req, const LocationConfig &loc, const std::string &contentType, Response &res);
-
-	// Build error page using location's custom pages or fallback
-	void	_buildError(int code, const LocationConfig &loc, Response &res);
-
-	// Utility
-	static std::string	_getExtension(const std::string &path);
-	static bool			_fileExists(const std::string &path);
-	static bool			_isDirectory(const std::string &path);
-	static bool			_hasPathTraversal(const std::string &path);
-
-	// Multipart helpers
-	static std::string	_extractBoundary(const std::string &contentType);
-	static std::string	_extractFilenameFromHeaders(const std::string &headers);
 };
 
 #endif
