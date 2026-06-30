@@ -24,9 +24,10 @@ public:
 	void	handleRequest(const Request &req, Response &res,
 						  const std::vector<LocationConfig> &locations);
 
-private:
 	// Step 1: Find the matching location (longest prefix)
-	const LocationConfig	*_matchLocation(const std::string &uri, const std::vector<LocationConfig> &locations);
+	static const LocationConfig* matchLocation(const std::string &uri, const std::vector<LocationConfig> &locations);
+
+private:
 
 	// Step 2: Check if the HTTP method is allowed
 	bool	_isMethodAllowed(const std::string &method,

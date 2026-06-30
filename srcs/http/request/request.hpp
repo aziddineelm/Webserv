@@ -28,6 +28,8 @@ public:
 	bool	hasError() const;
 	void	reset();
 
+	// Essential for preventing disk exhaustion during parsing
+	void	setMaxBodySize(size_t maxSize);
 
 	// Getters
 	const std::string&	getMethod() const;
@@ -41,6 +43,7 @@ public:
 	const std::string&	getBodyFilePath() const;
 	size_t				getBodyBytesWritten() const;
 	int					getErrorCode() const;
+	ParseState			getState() const;
 	bool				isKeepAlive() const;
 
 private:
@@ -56,6 +59,7 @@ private:
 	// Body-to-disk state (Phase 4 — prevents OOM on large uploads)
 	std::string		_bodyFilePath;
 	size_t			_bodyBytesWritten;
+	size_t			_maxBodySize;
 
 	// Parser state
 	ParseState		_state;

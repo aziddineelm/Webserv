@@ -35,8 +35,7 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		int code = req.getErrorCode();
 		if (code == 0)
 			code = 400;
-		// No location matched yet, try to find one for error page
-		const LocationConfig *errLoc = _matchLocation(req.getPath(), locations);
+		const LocationConfig *errLoc = matchLocation(req.getPath(), locations);
 		if (errLoc)
 			HttpUtils::buildErrorPage(code, *errLoc, res);
 		else
@@ -44,8 +43,7 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		return;
 	}
 
-	// 1. Match location
-	const LocationConfig *loc = _matchLocation(req.getPath(), locations);
+	const LocationConfig *loc = matchLocation(req.getPath(), locations);
 	if (!loc) {
 		res.buildErrorPage(404);
 		return;
@@ -105,7 +103,7 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 // Private: Location Matching — Longest Prefix Wins
 // ============================================================
 
-const LocationConfig *Router::_matchLocation( const std::string &uri, const std::vector<LocationConfig> &locations) {
+const LocationConfig *Router::matchLocation(const std::string &uri, const std::vector<LocationConfig> &locations) {
 	const LocationConfig *best = NULL;
 	size_t bestLen = 0;
 
