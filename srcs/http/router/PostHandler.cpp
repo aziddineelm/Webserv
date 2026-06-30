@@ -56,6 +56,11 @@ void PostHandler::_saveRawBody(const Request &req, const LocationConfig &loc, Re
 			return;
 		}
 		out.write(req.getBody().c_str(), req.getBody().size());
+		if (out.fail() || out.bad()) {
+			out.close();
+			HttpUtils::buildErrorPage(500, loc, res);
+			return;
+		}
 		out.close();
 	}
 
@@ -164,8 +169,15 @@ void PostHandler::_saveMultipart(const Request &req, const LocationConfig &loc, 
 			carryOver = combined.substr(safeWrite);
 		}
 	}
-	if (!foundEnd && !carryOver.empty())
+	if (!foundEnd && !carryOver.empty()) {
 		outFile.write(carryOver.c_str(), carryOver.size());
+	}
+
+	if (outFile.fail() || outFile.bad()) {
+		outFile.close();
+		HttpUtils::buildErrorPage(500, loc, res);
+		return;
+	}
 	outFile.close();
 
 	res.setStatus(201);

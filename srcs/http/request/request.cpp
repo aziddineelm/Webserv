@@ -467,6 +467,11 @@ void Request::_parseBody() {
 		return;
 	}
 	out.write(_buffer.c_str(), toWrite);
+	if (out.fail() || out.bad()) {
+		out.close();
+		_setError(500); // 500 Internal Server Error (Disk Full)
+		return;
+	}
 	out.close();
 
 	_buffer.erase(0, toWrite);
@@ -528,6 +533,11 @@ void Request::_parseChunkedBody() {
 			return;
 		}
 		out.write(_buffer.c_str() + pos + 2, csz);
+		if (out.fail() || out.bad()) {
+			out.close();
+			_setError(500); // Disk Full
+			return;
+		}
 		out.close();
 
 		_bodyBytesWritten += csz;
