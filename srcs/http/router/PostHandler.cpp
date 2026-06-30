@@ -3,6 +3,7 @@
 #include <fstream>
 #include <cstdio>
 #include <sys/stat.h>
+#include <unistd.h>
 
 void PostHandler::handle(const Request &req, const LocationConfig &loc, Response &res) {
 	if (loc.upload_store.empty()) {
@@ -36,8 +37,17 @@ void PostHandler::_saveRawBody(const Request &req, const LocationConfig &loc, Re
 
 	if (!req.getBodyFilePath().empty()) {
 		if (std::rename(req.getBodyFilePath().c_str(), savePath.c_str()) != 0) {
-			HttpUtils::buildErrorPage(500, loc, res);
-			return;
+			// Fallback: EXDEV (cross-device link) rename() fails across different filesystems (e.g. /tmp to /var)
+			std::ifstream src(req.getBodyFilePath().c_str(), std::ios::binary);
+			std::ofstream dst(savePath.c_str(), std::ios::binary);
+			if (!src.is_open() || !dst.is_open()) {
+				HttpUtils::buildErrorPage(500, loc, res);
+				return;
+			}
+			dst << src.rdbuf();
+			src.close();
+			dst.close();
+			unlink(req.getBodyFilePath().c_str());
 		}
 	} else {
 		std::ofstream out(savePath.c_str(), std::ios::binary);
