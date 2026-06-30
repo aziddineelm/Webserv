@@ -3,8 +3,7 @@
 
 #include "Client.hpp"
 #include "../config/ServerConfig.hpp"
-#include "../http/router/router.hpp"
-#include "../http/response/response.hpp"
+
 #include <vector>
 #include <map>
 #include <sys/epoll.h>

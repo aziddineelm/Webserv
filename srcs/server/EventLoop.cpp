@@ -7,6 +7,8 @@
 #include <netinet/in.h>	// sockaddr_in, ntohl, ntohs
 #include <sys/socket.h>	// recv, send, accept
 #include <csignal>		// sig_atomic_t
+#include "../http/router/router.hpp"
+#include "../http/response/response.hpp"
 
 // External flag set by signal handler (defined in main.cpp)
 extern volatile sig_atomic_t g_running;
