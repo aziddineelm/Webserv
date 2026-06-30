@@ -30,13 +30,8 @@ public:
 	std::string	getNextChunk();
 	bool		isDone() const;
 
-	// Legacy serialize — still works for string-mode responses
-	std::string	serialize() const;
 
-	// Getters
-	int				getStatusCode() const;
-	std::string		getHeader(const std::string &key) const;
-	const std::string&	getBody() const;
+
 
 	// Utility (static)
 	static std::string	getMimeType(const std::string &extension);

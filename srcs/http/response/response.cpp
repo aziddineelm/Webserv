@@ -153,34 +153,7 @@ std::string Response::getNextChunk() {
 
 bool Response::isDone() const { return _done; }
 
-// ============================================================
-// Legacy Serialize — still works for string-mode responses
-// ============================================================
 
-// Output format (RFC 2616 §6):
-//   HTTP/1.1 200 OK\r\n
-//   Content-Type: text/html\r\n
-//   Content-Length: 45\r\n
-//   \r\n
-//   <html>...</html>
-std::string Response::serialize() const {
-	return getHeaders() + _body;
-}
-
-// ============================================================
-// Getters
-// ============================================================
-
-int Response::getStatusCode() const { return _statusCode; }
-
-std::string Response::getHeader(const std::string &key) const {
-	std::map<std::string, std::string>::const_iterator it = _headers.find(key);
-	if (it != _headers.end())
-		return it->second;
-	return "";
-}
-
-const std::string &Response::getBody() const { return _body; }
 
 // ============================================================
 // Static Utility — Status Code Table

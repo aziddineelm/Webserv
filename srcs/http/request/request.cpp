@@ -122,7 +122,6 @@ const std::string &Request::getBody() const { return _body; }
 const std::string &Request::getBodyFilePath() const { return _bodyFilePath; }
 size_t Request::getBodyBytesWritten() const { return _bodyBytesWritten; }
 int Request::getErrorCode() const { return _errorCode; }
-ParseState Request::getState() const { return _state; }
 bool Request::isKeepAlive() const { return _keepAlive; }
 
 // ============================================================

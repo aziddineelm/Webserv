@@ -41,7 +41,6 @@ public:
 	const std::string&	getBodyFilePath() const;
 	size_t				getBodyBytesWritten() const;
 	int					getErrorCode() const;
-	ParseState			getState() const;
 	bool				isKeepAlive() const;
 
 private:
