@@ -5,16 +5,7 @@
 #include <ctime>
 #include "../http/request/request.hpp"
 #include "../http/response/response.hpp"
-
-// --------------------------------------------------------------------------
-// FD type — determines how the event loop handles events on this FD
-// --------------------------------------------------------------------------
-
-enum FdType {
-	FD_LISTEN,		// Listening socket → accept() on POLLIN
-	FD_CLIENT,		// Client connection → recv()/send()
-	FD_CGI_PIPE		// CGI pipe → read() (Phase 3)
-};
+#include "../cgi/CGIHandler.hpp"
 
 // --------------------------------------------------------------------------
 // Client state — where this connection is in the request/response lifecycle
@@ -22,6 +13,7 @@ enum FdType {
 
 enum ClientState {
 	STATE_READING,		// Waiting for complete HTTP request
+	STATE_CGI_RUNNING,	// CGI process is running (pipes registered in epoll)
 	STATE_WRITING,		// Sending HTTP response
 	STATE_DONE			// Ready to close
 };
@@ -35,6 +27,7 @@ struct Client {
 	ClientState		state;
 	Request			request;		// HTTP request parser (streaming, owns its own buffer)
 	Response		response;		// HTTP response stream
+	CGIHandler		cgi;			// CGI process handler (Phase 3)
 	std::string		writeBuffer;
 	size_t			writeOffset;
 	time_t			lastActivity;

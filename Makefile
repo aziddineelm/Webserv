@@ -21,7 +21,11 @@ SRCS            = srcs/main.cpp \
                           srcs/http/router/GetHandler.cpp \
                           srcs/config/ConfigParser.cpp \
                           srcs/config/ServerConfig.cpp \
-                          srcs/cgi/TempFile.cpp
+                          srcs/cgi/TempFile.cpp \
+                          srcs/cgi/CGIHandler.cpp \
+                          srcs/cgi/ProcessSpawner.cpp \
+                          srcs/cgi/EnvBuilder.cpp \
+                          srcs/cgi/CGIResponseParser.cpp
 
 OBJS 		= $(SRCS:.cpp=.o)
 

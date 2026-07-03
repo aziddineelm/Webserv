@@ -68,7 +68,23 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		return;
 	}
 
-	// 5. Route by method — POST and DELETE have their own handlers
+	// 5. Resolve URI → filesystem path
+	std::string filePath = _resolvePath(req.getPath(), *loc);
+
+	// 5b. Block path traversal
+	if (filePath.empty() || HttpUtils::hasPathTraversal(filePath)) {
+		HttpUtils::buildErrorPage(403, *loc, res);
+		return;
+	}
+
+	// 6. Check for CGI dispatch (handles GET, POST, etc.)
+	std::string ext = HttpUtils::getExtension(filePath);
+	if (!ext.empty() && loc->cgi_map.find(ext) != loc->cgi_map.end()) {
+		res.setCgiScript(filePath, loc->cgi_map.find(ext)->second);
+		return;
+	}
+
+	// 7. Route non-CGI requests by method
 	if (req.getMethod() == "DELETE") {
 		_handleDelete(req, *loc, res);
 		return;
@@ -78,24 +94,7 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		return;
 	}
 
-	// 5. GET: Resolve URI → filesystem path
-	std::string filePath = _resolvePath(req.getPath(), *loc);
-
-	// 5b. Block path traversal
-	if (filePath.empty() || HttpUtils::hasPathTraversal(filePath)) {
-		HttpUtils::buildErrorPage(403, *loc, res);
-		return;
-	}
-
-	// 6. Check for CGI dispatch
-	std::string ext = HttpUtils::getExtension(filePath);
-	if (!ext.empty() && loc->cgi_map.find(ext) != loc->cgi_map.end()) {
-		// TODO: Dispatch to CGIHandler (Person C will wire this up)
-		HttpUtils::buildErrorPage(501, *loc, res);
-		return;
-	}
-
-	// 7. Serve
+	// 8. Serve GET static file
 	GetHandler::handle(req, *loc, filePath, res);
 }
 

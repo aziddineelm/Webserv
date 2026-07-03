@@ -25,6 +25,7 @@ private:
 	int							_epollFd;
 	std::map<int, Client>		_clients;		// clientFd → Client
 	std::map<int, int>			_listenPorts;	// listenFd → port
+	std::map<int, int>			_cgiToClient;	// cgiFd → clientFd
 	std::vector<ServerConfig>	_configs;		// All server configurations
 	bool						_running;
 
@@ -33,6 +34,7 @@ private:
 	void	_handleRead(int clientFd);
 	void	_handleWrite(int clientFd);
 	void	_handleDisconnect(int clientFd);
+	void	_handleCgiReady(int pipeFd, uint32_t events);
 
 	// epoll management
 	void	_addEpollFd(int fd, uint32_t events);
