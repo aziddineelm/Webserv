@@ -17,6 +17,8 @@ public:
 	void	setStatus(int code);
 	void	setHeader(const std::string &key, const std::string &value);
 	void	setBody(const std::string &body);
+	int		getStatusCode() const;
+	const std::string &getBody() const;
 
 	// File streaming — sets file mode instead of loading into RAM
 	void	setFilePath(const std::string &path, size_t fileSize);
@@ -24,6 +26,13 @@ public:
 	// Convenience builders
 	void	buildErrorPage(int code, const std::string &filePath = "");
 	void	buildRedirect(int code, const std::string &location);
+	void	buildFromCgiOutput(const std::string &rawCgiOutput);
+
+	// CGI metadata — Router sets these when the request targets a CGI script
+	void		setCgiScript(const std::string &script, const std::string &interpreter);
+	std::string	getCgiScript() const;
+	std::string	getCgiInterpreter() const;
+	bool		isCgi() const;
 
 	// Streaming API — Person A calls these in a loop
 	std::string	getHeaders() const;
@@ -49,6 +58,10 @@ private:
 	size_t			_fileSize;
 	bool			_headersSent;
 	bool			_done;
+
+	// CGI metadata (set by Router, read by EventLoop)
+	std::string		_cgiScriptPath;
+	std::string		_cgiInterpreterPath;
 
 	// Fallback error page + file reader
 	static std::string	_generateErrorHtml(int code, const std::string &reason);

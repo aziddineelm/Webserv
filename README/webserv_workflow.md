@@ -78,24 +78,24 @@ Webserv/
 Build the **engine** — the socket layer, the event loop, and connection management. Everything that makes the server accept, read, write, and close connections.
 
 ### Phase 1 — Socket & Listening (Week 1–2)
-- [ ] Create `Socket` class: bind, listen, set non-blocking
-- [ ] Support **multiple listening ports** (one socket per port)
-- [ ] Handle `SO_REUSEADDR` and `SO_REUSEPORT`
-- [ ] Test: server listens on configured ports, accepts `telnet` connections
+- [x] Create `Socket` class: bind, listen, set non-blocking
+- [x] Support **multiple listening ports** (one socket per port)
+- [x] Handle `SO_REUSEADDR` and `SO_REUSEPORT`
+- [x] Test: server listens on configured ports, accepts `telnet` connections
 
 ### Phase 2 — Event Loop (Week 2–3)
-- [ ] Implement the **single poll/epoll loop** for all I/O
-- [ ] Register listening sockets → accept new clients
-- [ ] Register client sockets → track read/write readiness
-- [ ] Implement **connection timeout** (drop idle clients)
-- [ ] Handle client disconnections gracefully (no crashes, no leaks)
-- [ ] Test: multiple simultaneous `telnet` or `curl` connections
+- [x] Implement the **single poll/epoll loop** for all I/O
+- [x] Register listening sockets → accept new clients
+- [x] Register client sockets → track read/write readiness
+- [x] Implement **connection timeout** (drop idle clients)
+- [x] Handle client disconnections gracefully (no crashes, no leaks)
+- [x] Test: multiple simultaneous `telnet` or `curl` connections
 
 ### Phase 3 — Integration (Week 3–4)
-- [ ] When data is ready to read → pass raw data to **Person B**'s `Request` parser
-- [ ] When response is ready → write **Person B**'s `Response` buffer to client
-- [ ] Support **chunked writing** (large responses sent over multiple poll cycles)
-- [ ] Integrate with **Person C**'s config (which ports to listen on, server blocks)
+- [x] When data is ready to read → pass raw data to **Person B**'s `Request` parser
+- [x] When response is ready → write **Person B**'s `Response` buffer to client
+- [x] Support **chunked writing** (large responses sent over multiple poll cycles)
+- [x] Integrate with **Person C**'s config (which ports to listen on, server blocks)
 
 ### Phase 4 — Hardening (Week 4–5)
 - [ ] Stress test with `siege` or `ab` (Apache Bench)
@@ -245,21 +245,21 @@ server {
 ```
 
 ### Phase 2 — CGI Handler (Week 2–4)
-- [ ] Implement `CgiHandler` class
-- [ ] Detect CGI requests by **file extension** (e.g., `.py`, `.php`)
-- [ ] Set up CGI **environment variables**:
+- [x] Implement `CgiHandler` class
+- [x] Detect CGI requests by **file extension** (e.g., `.py`, `.php`)
+- [x] Set up CGI **environment variables**:
   - `REQUEST_METHOD`, `QUERY_STRING`, `CONTENT_TYPE`, `CONTENT_LENGTH`
   - `SCRIPT_NAME`, `PATH_INFO`, `PATH_TRANSLATED`
   - `SERVER_NAME`, `SERVER_PORT`, `SERVER_PROTOCOL`
   - `HTTP_*` (forwarded headers)
-- [ ] Execute CGI via `fork()` + `execve()`
-- [ ] Pipe request body to CGI's `stdin` (for POST)
-- [ ] Read CGI's `stdout` for the response
-- [ ] Parse CGI output headers (e.g., `Content-Type`, `Status`)
-- [ ] Handle **CGI timeout** (kill process if it runs too long)
-- [ ] Make CGI execution **non-blocking** (integrate with Person A's event loop)
-- [ ] Handle chunked request bodies (un-chunk before sending to CGI)
-- [ ] Test with a Python CGI script and/or PHP-CGI
+- [x] Execute CGI via `fork()` + `execve()`
+- [x] Pipe request body to CGI's `stdin` (for POST)
+- [x] Read CGI's `stdout` for the response
+- [x] Parse CGI output headers (e.g., `Content-Type`, `Status`)
+- [x] Handle **CGI timeout** (kill process if it runs too long)
+- [x] Make CGI execution **non-blocking** (integrate with Person A's event loop)
+- [x] Handle chunked request bodies (un-chunk before sending to CGI)
+- [x] Test with a Python CGI script and/or PHP-CGI
 
 ### Phase 3 — Integration & Edge Cases (Week 4–5)
 - [ ] Provide config data to Person A (ports, server blocks) and Person B (routes, locations)
