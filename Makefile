@@ -19,6 +19,7 @@ SRCS            = srcs/main.cpp \
                           srcs/http/router/HttpUtils.cpp \
                           srcs/http/router/PostHandler.cpp \
                           srcs/http/router/GetHandler.cpp \
+                          srcs/http/router/SessionManager.cpp \
                           srcs/config/ConfigParser.cpp \
                           srcs/config/ServerConfig.cpp \
                           srcs/cgi/TempFile.cpp \

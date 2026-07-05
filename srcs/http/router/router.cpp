@@ -2,6 +2,7 @@
 #include "HttpUtils.hpp"
 #include "PostHandler.hpp"
 #include "GetHandler.hpp"
+#include "SessionManager.hpp"
 #include <unistd.h>
 // ============================================================
 // Orthodox Canonical Form
@@ -96,6 +97,16 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 
 	// 8. Serve GET static file
 	GetHandler::handle(req, *loc, filePath, res);
+
+	// --- BONUS: POST-PROCESSING SESSION MANAGEMENT ---
+	// Only attach sessions to SUCCESSFUL requests (prevent 404-scan memory bloat)
+	// and skip static assets (.css, .png) to mimic NGINX high-performance.
+	int status = res.getStatusCode();
+	if (status >= 200 && status < 300) {
+		if (!HttpUtils::isStaticAsset(req.getPath())) {
+			SessionManager::attachSession(req, res);
+		}
+	}
 }
 
 // ============================================================
