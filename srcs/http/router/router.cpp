@@ -236,3 +236,50 @@ void Router::_handleDelete(const Request &req, const LocationConfig &loc, Respon
 	res.setHeader("Content-Type", "text/plain");
 	res.setBody("File deleted successfully");
 }
+
+// ============================================================
+// Static: Virtual Host Resolution — NGINX Algorithm
+// ============================================================
+//
+// Resolution order:
+//   1. Filter configs that listen on listenPort
+//   2. Strip port suffix from Host header (e.g. "host:8080" -> "host")
+//   3. Exact match against each config's server_names list
+//   4. Fallback to first port-matching config (NGINX default behavior)
+//
+const ServerConfig *Router::resolveVirtualHost(const Request &req, int listenPort, const std::vector<ServerConfig> &configs)
+{
+	// Extract and normalize Host header — strip optional ":port" suffix
+	std::string host = req.getHeader("host");
+	size_t colonPos = host.rfind(':');
+	if (colonPos != std::string::npos)
+		host = host.substr(0, colonPos);
+
+	const ServerConfig *fallback = NULL;
+
+	for (size_t i = 0; i < configs.size(); ++i) {
+		// Check if this config listens on the requested port
+		bool listensOnPort = false;
+		for (size_t p = 0; p < configs[i].listen_ports.size(); ++p) {
+			if (configs[i].listen_ports[p] == static_cast<uint16_t>(listenPort)) {
+				listensOnPort = true;
+				break;
+			}
+		}
+		if (!listensOnPort)
+			continue;
+
+		// First port-matching config is the default fallback
+		if (fallback == NULL)
+			fallback = &configs[i];
+
+		// Exact server_name match — return immediately, no need to keep searching
+		for (size_t n = 0; n < configs[i].server_names.size(); ++n) {
+			if (configs[i].server_names[n] == host)
+				return &configs[i];
+		}
+	}
+
+	// No server_name matched — NGINX returns first port-matching config
+	return fallback;
+}

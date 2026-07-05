@@ -206,26 +206,24 @@ void EventLoop::_handleRead(int clientFd) {
 					  << client.request.getErrorCode() << std::endl;
 		}
 
-		// --- BASIC SERVER MATCHING ---
-		// (Note: Full Virtual Hosting by Host header will be done by Person B in Phase 5)
-		const ServerConfig* bestConfig = NULL;
-		for (size_t i = 0; i < _configs.size(); ++i) {
-			for (size_t p = 0; p < _configs[i].listen_ports.size(); ++p) {
-				if (_configs[i].listen_ports[p] == client.listenPort) {
-					bestConfig = &_configs[i];
-					break; // Pick the first config for this port
-				}
-			}
-			if (bestConfig) break;
+		// --- PHASE 5: VIRTUAL HOSTING ---
+		// RFC 2616 §14.23: HTTP/1.1 requests MUST include a Host header.
+		if (client.request.isComplete() && client.request.getVersion() == "HTTP/1.1" && client.request.getHeader("host").empty())
+		{
+			client.response.buildErrorPage(400);
 		}
+		else
+		{
+			const ServerConfig *bestConfig = Router::resolveVirtualHost(client.request, client.listenPort, _configs);
 
-		// --- ROUTING & RESPONSE BUILDING ---
-		if (bestConfig) {
-			Router router;
-			router.handleRequest(client.request, client.response, bestConfig->getLocationList());
-		} else {
-			// Fallback if absolutely no config matches (shouldn't happen)
-			client.response.buildErrorPage(500);
+			// --- ROUTING & RESPONSE BUILDING ---
+			if (bestConfig) {
+				Router router;
+				router.handleRequest(client.request, client.response, bestConfig->getLocationList());
+			} else {
+				// No server block listens on this port at all — should not happen
+				client.response.buildErrorPage(500);
+			}
 		}
 
 		// Honor Keep-Alive request
