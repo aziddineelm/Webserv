@@ -1,6 +1,8 @@
 #include "response.hpp"
+#include "../../cgi/CGIResponseParser.hpp"
 #include <sstream>
 #include <fstream>
+#include <cstdlib>
 
 // ============================================================
 // Orthodox Canonical Form
@@ -24,6 +26,8 @@ Response &Response::operator=(const Response &other) {
 		_fileSize = other._fileSize;
 		_headersSent = other._headersSent;
 		_done = other._done;
+		_cgiScriptPath = other._cgiScriptPath;
+		_cgiInterpreterPath = other._cgiInterpreterPath;
 	}
 	return *this;
 }
@@ -39,6 +43,8 @@ void Response::setStatus(int code) {
 	_reasonPhrase = getReasonPhrase(code);
 }
 
+int Response::getStatusCode() const { return _statusCode; }
+
 void Response::setHeader(const std::string &key, const std::string &value) {
 	_headers[key] = value;
 }
@@ -51,6 +57,8 @@ void Response::setBody(const std::string &body) {
 	_headers["Content-Length"] = oss.str();
 }
 
+const std::string &Response::getBody() const { return _body; }
+
 // Set file-mode: store path + size, auto-set Content-Length.
 // Does NOT read the file — Person A streams it via getNextChunk().
 void Response::setFilePath(const std::string &path, size_t fileSize) {
@@ -61,6 +69,19 @@ void Response::setFilePath(const std::string &path, size_t fileSize) {
 	oss << fileSize;
 	_headers["Content-Length"] = oss.str();
 }
+
+// ============================================================
+// CGI Metadata — Router tells EventLoop what to execute
+// ============================================================
+
+void Response::setCgiScript(const std::string &script, const std::string &interpreter) {
+	_cgiScriptPath = script;
+	_cgiInterpreterPath = interpreter;
+}
+
+std::string Response::getCgiScript() const { return _cgiScriptPath; }
+std::string Response::getCgiInterpreter() const { return _cgiInterpreterPath; }
+bool Response::isCgi() const { return !_cgiScriptPath.empty(); }
 
 // ============================================================
 // Convenience Builders
@@ -86,6 +107,32 @@ void Response::buildRedirect(int code, const std::string &location) {
 	setStatus(code);
 	setHeader("Location", location);
 	setBody("");
+}
+
+// Build response from CGI raw output
+void Response::buildFromCgiOutput(const std::string &rawCgiOutput) {
+	CGIResponseParser parser;
+	std::map<std::string, std::string> cgiHeaders;
+	std::string cgiBody;
+	parser.parse(rawCgiOutput, cgiHeaders, cgiBody);
+
+	// Extract status code from CGI headers (default 200)
+	int statusCode = 200;
+	std::map<std::string, std::string>::iterator sit = cgiHeaders.find("Status");
+	if (sit != cgiHeaders.end()) {
+		statusCode = std::atoi(sit->second.c_str());
+		if (statusCode <= 0) statusCode = 200;
+		cgiHeaders.erase(sit);
+	}
+	setStatus(statusCode);
+
+	// Copy CGI headers into the HTTP response
+	for (std::map<std::string, std::string>::iterator hi = cgiHeaders.begin();
+		 hi != cgiHeaders.end(); ++hi) {
+		setHeader(hi->first, hi->second);
+	}
+
+	setBody(cgiBody);
 }
 
 // ============================================================
