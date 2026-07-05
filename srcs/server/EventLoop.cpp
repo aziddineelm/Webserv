@@ -201,19 +201,8 @@ void EventLoop::_handleRead(int clientFd) {
 	client.request.feed(std::string(buf, bytesRead));
 
 	// Check if the parser has finished (complete request or parse error)
-	if (client.request.isComplete() || client.request.hasError()) {
-		// Log what was parsed
-		if (client.request.isComplete()) {
-			std::cout << "[EventLoop] Request complete (fd " << clientFd << "): "
-					  << client.request.getMethod() << " "
-					  << client.request.getPath() << std::endl;
-		} else {
-			std::cerr << "[EventLoop] Request parse error (fd " << clientFd << "): "
-					  << client.request.getErrorCode() << std::endl;
-		}
-
+	if (client.request.isComplete() || client.request.hasError())
 		_dispatchRequest(clientFd, client);
-	}
 }
 
 // --------------------------------------------------------------------------
@@ -221,21 +210,17 @@ void EventLoop::_handleRead(int clientFd) {
 // --------------------------------------------------------------------------
 
 void EventLoop::_dispatchRequest(int clientFd, Client &client) {
+
 	// --- VIRTUAL HOSTING ---
-	const ServerConfig *bestConfig = Router::resolveVirtualHost(client.request, client.listenPort, _configs);
+	const ServerConfig *serverConfig = Router::resolveVirtualHost(client.request, client.listenPort, _configs);
 
 	// --- ROUTING & RESPONSE BUILDING ---
-	if (bestConfig) {
-		Router router;
-		router.handleRequest(client.request, client.response, bestConfig->getLocationList());
-	} else {
-		// No server block listens on this port at all — should not happen
-		client.response.buildErrorPage(500);
-	}
+	Router router;
+	router.handleRequest(client.request, client.response, serverConfig->getLocationList());
 
 	// --- CGI INTERCEPT: if Router flagged this as CGI, spawn the process ---
-	if (client.response.isCgi() && bestConfig) {
-		_spawnCgi(clientFd, client, *bestConfig);
+	if (client.response.isCgi()) {
+		_spawnCgi(clientFd, client, *serverConfig);
 		return;
 	}
 
@@ -255,9 +240,9 @@ void EventLoop::_dispatchRequest(int clientFd, Client &client) {
 // Helper: Spawn CGI process and register UNIX pipes with epoll
 // --------------------------------------------------------------------------
 
-void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &bestConfig) {
+void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serverConfig) {
 	bool started = client.cgi.startFromRequest(
-		client.request, bestConfig,
+		client.request, serverConfig,
 		client.response.getCgiScript(),
 		client.response.getCgiInterpreter(), 5);
 
