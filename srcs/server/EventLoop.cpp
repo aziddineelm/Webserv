@@ -85,7 +85,7 @@ void EventLoop::run() {
 			int fd = events[i].data.fd;
 			uint32_t revents = events[i].events;
 
-			// 1. Listener FD: accept new connections
+			// --- Listener FD: accept new connections ---
 			if (_listenPorts.find(fd) != _listenPorts.end()) {
 				if (revents & EPOLLIN)
 					_handleAccept(fd);
@@ -105,8 +105,9 @@ void EventLoop::run() {
 			}
 			if (revents & EPOLLIN) {
 				_handleRead(fd);
-				if (_clients.find(fd) == _clients.end())
-					continue;
+				if (_clients.find(fd) == _clients.end()) {
+					continue;	// Read detected disconnect
+				}
 			}
 			if (revents & EPOLLOUT) {
 				_handleWrite(fd);
@@ -214,23 +215,15 @@ void EventLoop::_handleRead(int clientFd) {
 		}
 
 		// --- PHASE 5: VIRTUAL HOSTING ---
-		// RFC 2616 §14.23: HTTP/1.1 requests MUST include a Host header.
-		if (client.request.isComplete() && client.request.getVersion() == "HTTP/1.1" && client.request.getHeader("host").empty())
-		{
-			client.response.buildErrorPage(400);
-		}
-		else
-		{
-			const ServerConfig *bestConfig = Router::resolveVirtualHost(client.request, client.listenPort, _configs);
+		const ServerConfig *bestConfig = Router::resolveVirtualHost(client.request, client.listenPort, _configs);
 
-			// --- ROUTING & RESPONSE BUILDING ---
-			if (bestConfig) {
-				Router router;
-				router.handleRequest(client.request, client.response, bestConfig->getLocationList());
-			} else {
-				// No server block listens on this port at all — should not happen
-				client.response.buildErrorPage(500);
-			}
+		// --- ROUTING & RESPONSE BUILDING ---
+		if (bestConfig) {
+			Router router;
+			router.handleRequest(client.request, client.response, bestConfig->getLocationList());
+		} else {
+			// No server block listens on this port at all — should not happen
+			client.response.buildErrorPage(500);
 		}
 
 		// --- CGI INTERCEPT: if Router flagged this as CGI, spawn the process ---
