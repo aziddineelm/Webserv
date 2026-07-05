@@ -36,6 +36,10 @@ private:
 	void	_handleDisconnect(int clientFd);
 	void	_handleCgiReady(int pipeFd, uint32_t events);
 
+	// Request dispatching & CGI helpers
+	void	_dispatchRequest(int clientFd, Client &client);
+	void	_spawnCgi(int clientFd, Client &client, const ServerConfig &bestConfig);
+
 	// epoll management
 	void	_addEpollFd(int fd, uint32_t events);
 	void	_removeEpollFd(int fd);

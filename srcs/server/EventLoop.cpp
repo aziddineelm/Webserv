@@ -10,7 +10,6 @@
 #include <cstdlib>		// atoi
 #include "../http/router/router.hpp"
 #include "../http/response/response.hpp"
-#include "../cgi/EnvBuilder.hpp"
 
 // External flag set by signal handler (defined in main.cpp)
 extern volatile sig_atomic_t g_running;
@@ -203,7 +202,6 @@ void EventLoop::_handleRead(int clientFd) {
 
 	// Check if the parser has finished (complete request or parse error)
 	if (client.request.isComplete() || client.request.hasError()) {
-
 		// Log what was parsed
 		if (client.request.isComplete()) {
 			std::cout << "[EventLoop] Request complete (fd " << clientFd << "): "
@@ -214,95 +212,90 @@ void EventLoop::_handleRead(int clientFd) {
 					  << client.request.getErrorCode() << std::endl;
 		}
 
-		// --- PHASE 5: VIRTUAL HOSTING ---
-		const ServerConfig *bestConfig = Router::resolveVirtualHost(client.request, client.listenPort, _configs);
+		_dispatchRequest(clientFd, client);
+	}
+}
 
-		// --- ROUTING & RESPONSE BUILDING ---
-		if (bestConfig) {
-			Router router;
-			router.handleRequest(client.request, client.response, bestConfig->getLocationList());
-		} else {
-			// No server block listens on this port at all — should not happen
-			client.response.buildErrorPage(500);
-		}
+// --------------------------------------------------------------------------
+// Helper: Dispatch complete request to Router / CGI
+// --------------------------------------------------------------------------
 
-		// --- CGI INTERCEPT: if Router flagged this as CGI, spawn the process ---
-		if (client.response.isCgi() && bestConfig) {
-			EnvBuilder envBuilder;
-			std::vector<std::string> envVars = envBuilder.buildFromRequest(client.request, *bestConfig);
+void EventLoop::_dispatchRequest(int clientFd, Client &client) {
+	// --- VIRTUAL HOSTING ---
+	const ServerConfig *bestConfig = Router::resolveVirtualHost(client.request, client.listenPort, _configs);
 
-			// Resolve the script to an absolute path before fork()
-			// (child may chdir, breaking relative paths)
-			std::string scriptPath = client.response.getCgiScript();
-			char resolvedBuf[4096];
-			if (realpath(scriptPath.c_str(), resolvedBuf) != NULL) {
-				scriptPath = resolvedBuf;
-			}
+	// --- ROUTING & RESPONSE BUILDING ---
+	if (bestConfig) {
+		Router router;
+		router.handleRequest(client.request, client.response, bestConfig->getLocationList());
+	} else {
+		// No server block listens on this port at all — should not happen
+		client.response.buildErrorPage(500);
+	}
 
-			std::string bodyFilePath = client.request.getBodyFilePath();
-			bool started = false;
-			if (!bodyFilePath.empty()) {
-				started = client.cgi.startFromFile(
-					scriptPath,
-					client.response.getCgiInterpreter(),
-					envVars, bodyFilePath, 5);
-			} else {
-				started = client.cgi.start(
-					scriptPath,
-					client.response.getCgiInterpreter(),
-					envVars, client.request.getBody(), 5);
-			}
+	// --- CGI INTERCEPT: if Router flagged this as CGI, spawn the process ---
+	if (client.response.isCgi() && bestConfig) {
+		_spawnCgi(clientFd, client, *bestConfig);
+		return;
+	}
 
-			if (!started) {
-				std::cerr << "[EventLoop] CGI spawn failed (fd " << clientFd << ")" << std::endl;
-				client.response = Response();
-				client.response.buildErrorPage(500);
-				client.state = STATE_WRITING;
-				_setEpollEvents(clientFd, EPOLLOUT);
-				client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
-				client.writeBuffer = client.response.getNextChunk();
-				client.writeOffset = 0;
-				return;
-			}
+	// --- Normal (non-CGI) response path ---
+	client.state = STATE_WRITING;
+	_setEpollEvents(clientFd, EPOLLOUT);
 
-			// Register CGI pipes into epoll
-			client.state = STATE_CGI_RUNNING;
-			_removeEpollFd(clientFd); // Pause client socket monitoring
+	// Honor Keep-Alive request
+	client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
 
-			int stdoutFd = client.cgi.getStdoutFd();
-			int stderrFd = client.cgi.getStderrFd();
-			int stdinFd = client.cgi.getStdinFd();
+	// Prime the pump: load the first chunk (HTTP headers) into the write buffer
+	client.writeBuffer = client.response.getNextChunk();
+	client.writeOffset = 0;
+}
 
-			if (stdoutFd >= 0) {
-				_addEpollFd(stdoutFd, EPOLLIN);
-				_cgiToClient[stdoutFd] = clientFd;
-			}
-			if (stderrFd >= 0) {
-				_addEpollFd(stderrFd, EPOLLIN);
-				_cgiToClient[stderrFd] = clientFd;
-			}
-			if (stdinFd >= 0) {
-				_addEpollFd(stdinFd, EPOLLOUT);
-				_cgiToClient[stdinFd] = clientFd;
-			}
+// --------------------------------------------------------------------------
+// Helper: Spawn CGI process and register UNIX pipes with epoll
+// --------------------------------------------------------------------------
 
-			std::cout << "[EventLoop] CGI started (fd " << clientFd << "): "
-					  << client.response.getCgiScript() << std::endl;
-			return;
-		}
+void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &bestConfig) {
+	bool started = client.cgi.startFromRequest(
+		client.request, bestConfig,
+		client.response.getCgiScript(),
+		client.response.getCgiInterpreter(), 5);
 
-		// --- Normal (non-CGI) response path ---
+	if (!started) {
+		std::cerr << "[EventLoop] CGI spawn failed (fd " << clientFd << ")" << std::endl;
+		client.response = Response();
+		client.response.buildErrorPage(500);
 		client.state = STATE_WRITING;
 		_setEpollEvents(clientFd, EPOLLOUT);
-
-		// Honor Keep-Alive request
 		client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
-
-		// Prime the pump: load the first chunk (HTTP headers) into the write buffer
 		client.writeBuffer = client.response.getNextChunk();
 		client.writeOffset = 0;
-
+		return;
 	}
+
+	// Register CGI pipes into epoll
+	client.state = STATE_CGI_RUNNING;
+	_removeEpollFd(clientFd); // Pause client socket monitoring
+
+	int stdoutFd = client.cgi.getStdoutFd();
+	int stderrFd = client.cgi.getStderrFd();
+	int stdinFd = client.cgi.getStdinFd();
+
+	if (stdoutFd >= 0) {
+		_addEpollFd(stdoutFd, EPOLLIN);
+		_cgiToClient[stdoutFd] = clientFd;
+	}
+	if (stderrFd >= 0) {
+		_addEpollFd(stderrFd, EPOLLIN);
+		_cgiToClient[stderrFd] = clientFd;
+	}
+	if (stdinFd >= 0) {
+		_addEpollFd(stdinFd, EPOLLOUT);
+		_cgiToClient[stdinFd] = clientFd;
+	}
+
+	std::cout << "[EventLoop] CGI started (fd " << clientFd << "): "
+			  << client.response.getCgiScript() << std::endl;
 }
 
 
