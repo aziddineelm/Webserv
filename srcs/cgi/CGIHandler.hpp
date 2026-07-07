@@ -5,6 +5,9 @@
 #include <vector>
 #include <time.h>
 
+class Request;
+class ServerConfig;
+
 // State of a CGI process managed by CGIHandler.
 enum CgiState {
     CGI_IDLE,       // No CGI process running
@@ -50,6 +53,13 @@ public:
                        const std::vector<std::string>& env,
                        const std::string& bodyFilePath,
                        int timeoutSeconds = 5);
+
+    // High-level wrapper: prepares environment, resolves symlinks, and starts CGI from an HTTP Request.
+    bool startFromRequest(const Request& req,
+                          const ServerConfig& config,
+                          const std::string& scriptPath,
+                          const std::string& interpreterPath,
+                          int timeoutSeconds = 5);
 
     // Called by the main loop when poll() reports stdinFd is writable.
     void onStdinReady();

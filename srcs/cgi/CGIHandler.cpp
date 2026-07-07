@@ -9,6 +9,10 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <stdlib.h>
+#include "EnvBuilder.hpp"
+#include "../http/request/request.hpp"
+#include "../config/ServerConfig.hpp"
 
 // --- Construction / Destruction ---
 
@@ -145,6 +149,29 @@ bool CGIHandler::startFromFile(const std::string& scriptPath,
     }
 
     return true;
+}
+
+bool CGIHandler::startFromRequest(const Request& req,
+                                  const ServerConfig& config,
+                                  const std::string& scriptPath,
+                                  const std::string& interpreterPath,
+                                  int timeoutSeconds)
+{
+    EnvBuilder envBuilder;
+    std::vector<std::string> envVars = envBuilder.buildFromRequest(req, config);
+
+    std::string resolvedScript = scriptPath;
+    char resolvedBuf[4096];
+    if (realpath(resolvedScript.c_str(), resolvedBuf) != NULL) {
+        resolvedScript = resolvedBuf;
+    }
+
+    std::string bodyFilePath = req.getBodyFilePath();
+    if (!bodyFilePath.empty()) {
+        return startFromFile(resolvedScript, interpreterPath, envVars, bodyFilePath, timeoutSeconds);
+    } else {
+        return start(resolvedScript, interpreterPath, envVars, req.getBody(), timeoutSeconds);
+    }
 }
 
 void CGIHandler::onStdinReady() {
