@@ -43,16 +43,6 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		return;
 	}
 
-	// RFC 2616 §14.23: HTTP/1.1 requests MUST include a Host header.
-	if (req.getVersion() == "HTTP/1.1" && req.getHeader("host").empty()) {
-		const LocationConfig *loc = matchLocation(req.getPath(), locations);
-		if (loc)
-			HttpUtils::buildErrorPage(400, *loc, res);
-		else
-			res.buildErrorPage(400);
-		return;
-	}
-
 	const LocationConfig *loc = matchLocation(req.getPath(), locations);
 	if (!loc) {
 		res.buildErrorPage(404);
