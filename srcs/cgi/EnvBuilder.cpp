@@ -45,6 +45,8 @@ std::string getFirst(const std::map<std::string, std::string>& m,
 EnvBuilder::EnvBuilder() {}
 EnvBuilder::~EnvBuilder() {}
 
+// TODO: Refactor or remove this loosely-typed guessing build method. 
+// Rely on buildFromRequest() with strongly-typed Request objects instead of guessing keys.
 std::vector<std::string> EnvBuilder::build(const std::map<std::string, std::string>& requestMeta) const {
     std::map<std::string, std::string> envMap;
 
