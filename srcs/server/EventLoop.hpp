@@ -39,6 +39,7 @@ private:
 	// Request dispatching & CGI helpers
 	void	_dispatchRequest(int clientFd, Client &client);
 	void	_spawnCgi(int clientFd, Client &client, const ServerConfig &bestConfig);
+	void	_startWriting(Client &client);
 
 	// epoll management
 	void	_addEpollFd(int fd, uint32_t events);

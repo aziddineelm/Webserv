@@ -91,13 +91,13 @@ void EventLoop::run() {
 				continue;
 			}
 
-			// 2. CGI Pipe FD: read/write CGI output/input
+			// --- CGI Pipe FD: read/write CGI output/input ---
 			if (_cgiToClient.find(fd) != _cgiToClient.end()) {
 				_handleCgiReady(fd, revents);
 				continue;
 			}
 
-			// 3. Client FD: handle HTTP I/O events
+			// --- Client FD: handle HTTP I/O events ---
 			if (revents & (EPOLLERR | EPOLLHUP)) {
 				_handleDisconnect(fd);
 				continue;
@@ -206,6 +206,17 @@ void EventLoop::_handleRead(int clientFd) {
 }
 
 // --------------------------------------------------------------------------
+// Helper: Prepare client for writing response
+// --------------------------------------------------------------------------
+
+void EventLoop::_startWriting(Client &client) {
+	client.state = STATE_WRITING;
+	client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
+	client.writeBuffer = client.response.getNextChunk();
+	client.writeOffset = 0;
+}
+
+// --------------------------------------------------------------------------
 // Helper: Dispatch complete request to Router / CGI
 // --------------------------------------------------------------------------
 
@@ -225,15 +236,8 @@ void EventLoop::_dispatchRequest(int clientFd, Client &client) {
 	}
 
 	// --- Normal (non-CGI) response path ---
-	client.state = STATE_WRITING;
+	_startWriting(client);
 	_setEpollEvents(clientFd, EPOLLOUT);
-
-	// Honor Keep-Alive request
-	client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
-
-	// Prime the pump: load the first chunk (HTTP headers) into the write buffer
-	client.writeBuffer = client.response.getNextChunk();
-	client.writeOffset = 0;
 }
 
 // --------------------------------------------------------------------------
@@ -248,11 +252,8 @@ void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serv
 		std::cerr << "[EventLoop] CGI spawn failed (fd " << clientFd << ")" << std::endl;
 		client.response = Response();
 		client.response.buildErrorPage(500);
-		client.state = STATE_WRITING;
+		_startWriting(client);
 		_setEpollEvents(clientFd, EPOLLOUT);
-		client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
-		client.writeBuffer = client.response.getNextChunk();
-		client.writeOffset = 0;
 		return;
 	}
 
@@ -341,6 +342,15 @@ void EventLoop::_handleWrite(int clientFd) {
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleDisconnect(int clientFd) {
+	std::map<int, Client>::iterator it = _clients.find(clientFd);
+	if (it != _clients.end() && it->second.state == STATE_CGI_RUNNING) {
+		int stdoutFd = it->second.cgi.getStdoutFd();
+		int stderrFd = it->second.cgi.getStderrFd();
+		int stdinFd  = it->second.cgi.getStdinFd();
+		if (stdoutFd >= 0) { _removeEpollFd(stdoutFd); _cgiToClient.erase(stdoutFd); }
+		if (stderrFd >= 0) { _removeEpollFd(stderrFd); _cgiToClient.erase(stderrFd); }
+		if (stdinFd  >= 0) { _removeEpollFd(stdinFd);  _cgiToClient.erase(stdinFd);  }
+	}
 	_removeEpollFd(clientFd);
 	close(clientFd);
 	_clients.erase(clientFd);
@@ -405,14 +415,9 @@ void EventLoop::_handleCgiReady(int pipeFd, uint32_t events) {
 			client.response.buildErrorPage(500);
 		}
 
-		// Honor Keep-Alive
-		client.response.setHeader("Connection", client.request.isKeepAlive() ? "keep-alive" : "close");
-
 		// Re-register the client socket for writing
+		_startWriting(client);
 		_addEpollFd(clientFd, EPOLLOUT);
-		client.state = STATE_WRITING;
-		client.writeBuffer = client.response.getNextChunk();
-		client.writeOffset = 0;
 	}
 }
 
@@ -470,9 +475,7 @@ void EventLoop::_checkTimeouts() {
 
 			std::cerr << "[EventLoop] CGI timeout (fd " << it->first << ")" << std::endl;
 			it->second.response.buildErrorPage(504);
-			it->second.state = STATE_WRITING;
-			it->second.writeBuffer = it->second.response.getNextChunk();
-			it->second.writeOffset = 0;
+			_startWriting(it->second);
 			_addEpollFd(it->first, EPOLLOUT);
 			++it;
 			continue;
