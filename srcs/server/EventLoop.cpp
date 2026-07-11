@@ -17,6 +17,7 @@ extern volatile sig_atomic_t g_running;
 #define POLL_TIMEOUT_MS		1000	// Wake up every second for timeout checks
 #define CLIENT_TIMEOUT_SEC	60		// Close clients idle for 60 seconds
 #define READ_BUFFER_SIZE	8192	// Stack buffer for recv() — one read per poll cycle
+#define CGI_TIMEOUT_SEC		5		// Close CGI processes idle for 5 seconds
 
 // --------------------------------------------------------------------------
 // Constructor / Destructor
@@ -246,7 +247,7 @@ void EventLoop::_dispatchRequest(int clientFd, Client &client) {
 
 void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serverConfig) {
 	
-	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter(), 5);
+	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter(), CGI_TIMEOUT_SEC);
 
 	if (!started) {
 		std::cerr << "[EventLoop] CGI spawn failed (fd " << clientFd << ")" << std::endl;
