@@ -86,7 +86,7 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		// CGI dispatch (handles GET, POST, etc.)
 		res.setCgiScript(filePath, loc->cgi_map.find(ext)->second);
 	} else if (req.getMethod() == "DELETE") {
-		_handleDelete(req, *loc, res);
+		_handleDelete(filePath, *loc, res);
 	} else if (req.getMethod() == "POST") {
 		PostHandler::handle(req, *loc, res);
 	} else {
@@ -214,14 +214,7 @@ std::string Router::_resolvePath(const std::string &uri, const LocationConfig &l
 // Private: DELETE Handler
 // ============================================================
 
-void Router::_handleDelete(const Request &req, const LocationConfig &loc, Response &res) {
-	std::string filePath = _resolvePath(req.getPath(), loc);
-
-	if (filePath.empty() || HttpUtils::hasPathTraversal(filePath)) {
-		HttpUtils::buildErrorPage(403, loc, res);
-		return;
-	}
-
+void Router::_handleDelete(const std::string &filePath, const LocationConfig &loc, Response &res) {
 	// Cannot delete directories
 	if (HttpUtils::isDirectory(filePath)) {
 		HttpUtils::buildErrorPage(403, loc, res);
