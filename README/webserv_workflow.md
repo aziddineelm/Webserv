@@ -22,11 +22,11 @@ Build a **fully functional HTTP/1.1 web server** in C++98 that handles multiple 
 > Everyone should complete this phase together before splitting. This ensures a shared understanding of the architecture.
 
 ### Tasks
-- [ ] Agree on **project structure** (directory layout, naming conventions)
-- [ ] Define **shared interfaces/classes** (see Architecture below)
-- [ ] Set up the **Makefile** (`all`, `clean`, `fclean`, `re`, `-Wall -Wextra -Werror -std=c++98`)
-- [ ] Create a basic `.gitignore`
-- [ ] Write the **README.md** skeleton
+- [x] Agree on **project structure** (directory layout, naming conventions)
+- [x] Define **shared interfaces/classes** (see Architecture below)
+- [x] Set up the **Makefile** (`all`, `clean`, `fclean`, `re`, `-Wall -Wextra -Werror -std=c++98`)
+- [x] Create a basic `.gitignore`
+- [x] Write the **README.md** skeleton
 
 ### What Everyone Should Learn
 | Topic | Why | Resource |
