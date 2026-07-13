@@ -323,7 +323,6 @@ void EventLoop::_handleWrite(int clientFd) {
 		std::cout << "[EventLoop] Response fully sent (fd " << clientFd << ")" << std::endl;
 		
 		if (client.request.isKeepAlive()) {
-			std::cout << "[EventLoop] Keep-Alive: resetting connection for fd " << clientFd << std::endl;
 			client.writeBuffer.clear();
 			client.writeOffset = 0;
 			client.request.reset();

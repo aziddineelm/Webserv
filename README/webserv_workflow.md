@@ -98,10 +98,10 @@ Build the **engine** — the socket layer, the event loop, and connection manage
 - [x] Integrate with **Person C**'s config (which ports to listen on, server blocks)
 
 ### Phase 4 — Hardening (Week 4–5)
-- [ ] Stress test with `siege` or `ab` (Apache Bench)
-- [ ] Ensure no file descriptor leaks
-- [ ] Verify `client_max_body_size` enforcement (reject oversized requests)
-- [ ] Test with a real browser (Chrome/Firefox)
+- [x] Stress test with `siege` or `ab` (Apache Bench)
+- [x] Ensure no file descriptor leaks
+- [x] Verify `client_max_body_size` enforcement (reject oversized requests)
+- [x] Test with a real browser (Chrome/Firefox)
 
 ### What Person A Should Learn
 
@@ -127,37 +127,37 @@ Build the **engine** — the socket layer, the event loop, and connection manage
 Parse raw HTTP requests into structured objects, route them to the right handler, build proper HTTP responses, and serve static files.
 
 ### Phase 1 — Request Parsing (Week 1–2)
-- [ ] Parse **request line**: `GET /path HTTP/1.1`
-- [ ] Parse **headers**: `Host`, `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Connection`
-- [ ] Parse **body**: regular body and chunked transfer encoding (`Transfer-Encoding: chunked`)
-- [ ] Validate method is one of: `GET`, `POST`, `DELETE`
-- [ ] Handle malformed requests → return `400 Bad Request`
-- [ ] Test: manually craft raw HTTP requests via `telnet`
+- [x] Parse **request line**: `GET /path HTTP/1.1`
+- [x] Parse **headers**: `Host`, `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Connection`
+- [x] Parse **body**: regular body and chunked transfer encoding (`Transfer-Encoding: chunked`)
+- [x] Validate method is one of: `GET`, `POST`, `DELETE`
+- [x] Handle malformed requests → return `400 Bad Request`
+- [x] Test: manually craft raw HTTP requests via `telnet`
 
 ### Phase 2 — Response Building (Week 2–3)
-- [ ] Build `Response` class: status line + headers + body
-- [ ] Implement **status codes**: 200, 201, 204, 301, 302, 400, 403, 404, 405, 413, 500
-- [ ] Set `Content-Type` based on file extension (MIME types: `.html`, `.css`, `.js`, `.jpg`, `.png`, etc.)
-- [ ] Set `Content-Length` header
-- [ ] Default and custom **error pages** (from config)
+- [x] Build `Response` class: status line + headers + body
+- [x] Implement **status codes**: 200, 201, 204, 301, 302, 400, 403, 404, 405, 413, 500
+- [x] Set `Content-Type` based on file extension (MIME types: `.html`, `.css`, `.js`, `.jpg`, `.png`, etc.)
+- [x] Set `Content-Length` header
+- [x] Default and custom **error pages** (from config)
 
 ### Phase 3 — Routing & Static File Serving (Week 3–4)
-- [ ] Implement `Router`: match request URI to a **location block** (from Person C's config)
-- [ ] Serve **static files** from the configured `root` directory
-- [ ] Handle **directory listing** (`autoindex on/off`)
-- [ ] Serve **default index file** (e.g., `index.html`) for directory requests
-- [ ] Handle **HTTP redirections** (301/302 from config)
-- [ ] Enforce **allowed methods** per location (return `405` if method not allowed)
+- [x] Implement `Router`: match request URI to a **location block** (from Person C's config)
+- [x] Serve **static files** from the configured `root` directory
+- [x] Handle **directory listing** (`autoindex on/off`)
+- [x] Serve **default index file** (e.g., `index.html`) for directory requests
+- [x] Handle **HTTP redirections** (301/302 from config)
+- [x] Enforce **allowed methods** per location (return `405` if method not allowed)
 
 ### Phase 4 — File Uploads & DELETE (Week 3–4)
-- [ ] Handle `POST` requests with `multipart/form-data` → save uploaded files
-- [ ] Handle `DELETE` requests → remove specified resource
-- [ ] Respect `client_max_body_size` → return `413 Payload Too Large`
+- [x] Handle `POST` requests with `multipart/form-data` → save uploaded files
+- [x] Handle `DELETE` requests → remove specified resource
+- [x] Respect `client_max_body_size` → return `413 Payload Too Large`
 
 ### Phase 5 — Virtual Hosting (Week 4–5)
-- [ ] Route requests to the correct **server block** based on `Host` header and `server_name`
-- [ ] Implement default server fallback
-- [ ] Test with multiple `server_name` values on the same port
+- [x] Route requests to the correct **server block** based on `Host` header and `server_name`
+- [x] Implement default server fallback
+- [x] Test with multiple `server_name` values on the same port
 
 ### What Person B Should Learn
 
@@ -183,8 +183,8 @@ Parse raw HTTP requests into structured objects, route them to the right handler
 Parse the NGINX-inspired configuration file and implement CGI execution for dynamic content (e.g., PHP, Python scripts).
 
 ### Phase 1 — Configuration Parser (Week 1–2)
-- [ ] Design the **config file format** (NGINX-like `server {}` and `location {}` blocks)
-- [ ] Parse into a `ServerConfig` struct/class containing:
+- [x] Design the **config file format** (NGINX-like `server {}` and `location {}` blocks)
+- [x] Parse into a `ServerConfig` struct/class containing:
   - `listen` (port)
   - `server_name` (hostname)
   - `root` (document root)
@@ -199,10 +199,10 @@ Parse the NGINX-inspired configuration file and implement CGI execution for dyna
     - `return` (redirections)
     - `cgi_extension` / `cgi_path`
     - `upload_store`
-- [ ] Handle **default values** for missing directives
-- [ ] Handle **multiple server blocks**
-- [ ] Validate config (error on invalid directives, missing required fields)
-- [ ] Test: parse various config files, print parsed structure
+- [x] Handle **default values** for missing directives
+- [x] Handle **multiple server blocks**
+- [x] Validate config (error on invalid directives, missing required fields)
+- [x] Test: parse various config files, print parsed structure
 
 ### Example Config File
 ```nginx
@@ -262,10 +262,10 @@ server {
 - [x] Test with a Python CGI script and/or PHP-CGI
 
 ### Phase 3 — Integration & Edge Cases (Week 4–5)
-- [ ] Provide config data to Person A (ports, server blocks) and Person B (routes, locations)
-- [ ] Test CGI with a real browser (form submission → PHP/Python processing)
-- [ ] Ensure CGI child processes are properly reaped (`waitpid`)
-- [ ] Handle CGI errors gracefully (return `500` on failure)
+- [x] Provide config data to Person A (ports, server blocks) and Person B (routes, locations)
+- [x] Test CGI with a real browser (form submission → PHP/Python processing)
+- [x] Ensure CGI child processes are properly reaped (`waitpid`)
+- [x] Handle CGI errors gracefully (return `500` on failure)
 
 ### What Person C Should Learn
 
