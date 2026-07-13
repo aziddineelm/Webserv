@@ -17,7 +17,7 @@ extern volatile sig_atomic_t g_running;
 #define POLL_TIMEOUT_MS		1000	// Wake up every second for timeout checks
 #define CLIENT_TIMEOUT_SEC	60		// Close clients idle for 60 seconds
 #define READ_BUFFER_SIZE	8192	// Stack buffer for recv() — one read per poll cycle
-#define CGI_TIMEOUT_SEC		5		// Close CGI processes idle for 5 seconds
+#define CGI_TIMEOUT_SEC		60		// Close CGI processes idle for 60 seconds
 
 // --------------------------------------------------------------------------
 // Constructor / Destructor

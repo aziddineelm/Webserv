@@ -325,7 +325,7 @@ def test_11_cgi_post_echo():
 def test_12_cgi_timeout_504():
     """GET /cgi-bin/infinite_loop.py should timeout with 504"""
     start = time.time()
-    status, headers, body = http_request("GET", "/cgi-bin/infinite_loop.py", timeout=15)
+    status, headers, body = http_request("GET", "/cgi-bin/infinite_loop.py", timeout=65)
     elapsed = time.time() - start
     if status == 504:
         return TestResult(TestResult.PASS, "CGI timeout (504)",
