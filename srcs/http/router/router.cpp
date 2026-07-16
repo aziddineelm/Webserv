@@ -120,8 +120,7 @@ const LocationConfig *Router::matchLocation(const std::string &uri, const std::v
 		if (uri.compare(0, prefix.size(), prefix) == 0) {
 			// For non-root locations, ensure we match at a boundary
 			// e.g., /images should NOT match /img
-			if (prefix != "/" && prefix.size() < uri.size()
-				&& uri[prefix.size()] != '/')
+			if (prefix != "/" && prefix.size() < uri.size() && uri[prefix.size()] != '/')
 				continue;
 
 			// Longest prefix wins
