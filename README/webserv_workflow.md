@@ -22,11 +22,11 @@ Build a **fully functional HTTP/1.1 web server** in C++98 that handles multiple 
 > Everyone should complete this phase together before splitting. This ensures a shared understanding of the architecture.
 
 ### Tasks
-- [ ] Agree on **project structure** (directory layout, naming conventions)
-- [ ] Define **shared interfaces/classes** (see Architecture below)
-- [ ] Set up the **Makefile** (`all`, `clean`, `fclean`, `re`, `-Wall -Wextra -Werror -std=c++98`)
-- [ ] Create a basic `.gitignore`
-- [ ] Write the **README.md** skeleton
+- [x] Agree on **project structure** (directory layout, naming conventions)
+- [x] Define **shared interfaces/classes** (see Architecture below)
+- [x] Set up the **Makefile** (`all`, `clean`, `fclean`, `re`, `-Wall -Wextra -Werror -std=c++98`)
+- [x] Create a basic `.gitignore`
+- [x] Write the **README.md** skeleton
 
 ### What Everyone Should Learn
 | Topic | Why | Resource |
@@ -78,30 +78,30 @@ Webserv/
 Build the **engine** — the socket layer, the event loop, and connection management. Everything that makes the server accept, read, write, and close connections.
 
 ### Phase 1 — Socket & Listening (Week 1–2)
-- [ ] Create `Socket` class: bind, listen, set non-blocking
-- [ ] Support **multiple listening ports** (one socket per port)
-- [ ] Handle `SO_REUSEADDR` and `SO_REUSEPORT`
-- [ ] Test: server listens on configured ports, accepts `telnet` connections
+- [x] Create `Socket` class: bind, listen, set non-blocking
+- [x] Support **multiple listening ports** (one socket per port)
+- [x] Handle `SO_REUSEADDR` and `SO_REUSEPORT`
+- [x] Test: server listens on configured ports, accepts `telnet` connections
 
 ### Phase 2 — Event Loop (Week 2–3)
-- [ ] Implement the **single poll/epoll loop** for all I/O
-- [ ] Register listening sockets → accept new clients
-- [ ] Register client sockets → track read/write readiness
-- [ ] Implement **connection timeout** (drop idle clients)
-- [ ] Handle client disconnections gracefully (no crashes, no leaks)
-- [ ] Test: multiple simultaneous `telnet` or `curl` connections
+- [x] Implement the **single poll/epoll loop** for all I/O
+- [x] Register listening sockets → accept new clients
+- [x] Register client sockets → track read/write readiness
+- [x] Implement **connection timeout** (drop idle clients)
+- [x] Handle client disconnections gracefully (no crashes, no leaks)
+- [x] Test: multiple simultaneous `telnet` or `curl` connections
 
 ### Phase 3 — Integration (Week 3–4)
-- [ ] When data is ready to read → pass raw data to **Person B**'s `Request` parser
-- [ ] When response is ready → write **Person B**'s `Response` buffer to client
-- [ ] Support **chunked writing** (large responses sent over multiple poll cycles)
-- [ ] Integrate with **Person C**'s config (which ports to listen on, server blocks)
+- [x] When data is ready to read → pass raw data to **Person B**'s `Request` parser
+- [x] When response is ready → write **Person B**'s `Response` buffer to client
+- [x] Support **chunked writing** (large responses sent over multiple poll cycles)
+- [x] Integrate with **Person C**'s config (which ports to listen on, server blocks)
 
 ### Phase 4 — Hardening (Week 4–5)
-- [ ] Stress test with `siege` or `ab` (Apache Bench)
-- [ ] Ensure no file descriptor leaks
-- [ ] Verify `client_max_body_size` enforcement (reject oversized requests)
-- [ ] Test with a real browser (Chrome/Firefox)
+- [x] Stress test with `siege` or `ab` (Apache Bench)
+- [x] Ensure no file descriptor leaks
+- [x] Verify `client_max_body_size` enforcement (reject oversized requests)
+- [x] Test with a real browser (Chrome/Firefox)
 
 ### What Person A Should Learn
 
@@ -127,37 +127,37 @@ Build the **engine** — the socket layer, the event loop, and connection manage
 Parse raw HTTP requests into structured objects, route them to the right handler, build proper HTTP responses, and serve static files.
 
 ### Phase 1 — Request Parsing (Week 1–2)
-- [ ] Parse **request line**: `GET /path HTTP/1.1`
-- [ ] Parse **headers**: `Host`, `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Connection`
-- [ ] Parse **body**: regular body and chunked transfer encoding (`Transfer-Encoding: chunked`)
-- [ ] Validate method is one of: `GET`, `POST`, `DELETE`
-- [ ] Handle malformed requests → return `400 Bad Request`
-- [ ] Test: manually craft raw HTTP requests via `telnet`
+- [x] Parse **request line**: `GET /path HTTP/1.1`
+- [x] Parse **headers**: `Host`, `Content-Length`, `Content-Type`, `Transfer-Encoding`, `Connection`
+- [x] Parse **body**: regular body and chunked transfer encoding (`Transfer-Encoding: chunked`)
+- [x] Validate method is one of: `GET`, `POST`, `DELETE`
+- [x] Handle malformed requests → return `400 Bad Request`
+- [x] Test: manually craft raw HTTP requests via `telnet`
 
 ### Phase 2 — Response Building (Week 2–3)
-- [ ] Build `Response` class: status line + headers + body
-- [ ] Implement **status codes**: 200, 201, 204, 301, 302, 400, 403, 404, 405, 413, 500
-- [ ] Set `Content-Type` based on file extension (MIME types: `.html`, `.css`, `.js`, `.jpg`, `.png`, etc.)
-- [ ] Set `Content-Length` header
-- [ ] Default and custom **error pages** (from config)
+- [x] Build `Response` class: status line + headers + body
+- [x] Implement **status codes**: 200, 201, 204, 301, 302, 400, 403, 404, 405, 413, 500
+- [x] Set `Content-Type` based on file extension (MIME types: `.html`, `.css`, `.js`, `.jpg`, `.png`, etc.)
+- [x] Set `Content-Length` header
+- [x] Default and custom **error pages** (from config)
 
 ### Phase 3 — Routing & Static File Serving (Week 3–4)
-- [ ] Implement `Router`: match request URI to a **location block** (from Person C's config)
-- [ ] Serve **static files** from the configured `root` directory
-- [ ] Handle **directory listing** (`autoindex on/off`)
-- [ ] Serve **default index file** (e.g., `index.html`) for directory requests
-- [ ] Handle **HTTP redirections** (301/302 from config)
-- [ ] Enforce **allowed methods** per location (return `405` if method not allowed)
+- [x] Implement `Router`: match request URI to a **location block** (from Person C's config)
+- [x] Serve **static files** from the configured `root` directory
+- [x] Handle **directory listing** (`autoindex on/off`)
+- [x] Serve **default index file** (e.g., `index.html`) for directory requests
+- [x] Handle **HTTP redirections** (301/302 from config)
+- [x] Enforce **allowed methods** per location (return `405` if method not allowed)
 
 ### Phase 4 — File Uploads & DELETE (Week 3–4)
-- [ ] Handle `POST` requests with `multipart/form-data` → save uploaded files
-- [ ] Handle `DELETE` requests → remove specified resource
-- [ ] Respect `client_max_body_size` → return `413 Payload Too Large`
+- [x] Handle `POST` requests with `multipart/form-data` → save uploaded files
+- [x] Handle `DELETE` requests → remove specified resource
+- [x] Respect `client_max_body_size` → return `413 Payload Too Large`
 
 ### Phase 5 — Virtual Hosting (Week 4–5)
-- [ ] Route requests to the correct **server block** based on `Host` header and `server_name`
-- [ ] Implement default server fallback
-- [ ] Test with multiple `server_name` values on the same port
+- [x] Route requests to the correct **server block** based on `Host` header and `server_name`
+- [x] Implement default server fallback
+- [x] Test with multiple `server_name` values on the same port
 
 ### What Person B Should Learn
 
@@ -183,8 +183,8 @@ Parse raw HTTP requests into structured objects, route them to the right handler
 Parse the NGINX-inspired configuration file and implement CGI execution for dynamic content (e.g., PHP, Python scripts).
 
 ### Phase 1 — Configuration Parser (Week 1–2)
-- [ ] Design the **config file format** (NGINX-like `server {}` and `location {}` blocks)
-- [ ] Parse into a `ServerConfig` struct/class containing:
+- [x] Design the **config file format** (NGINX-like `server {}` and `location {}` blocks)
+- [x] Parse into a `ServerConfig` struct/class containing:
   - `listen` (port)
   - `server_name` (hostname)
   - `root` (document root)
@@ -199,10 +199,10 @@ Parse the NGINX-inspired configuration file and implement CGI execution for dyna
     - `return` (redirections)
     - `cgi_extension` / `cgi_path`
     - `upload_store`
-- [ ] Handle **default values** for missing directives
-- [ ] Handle **multiple server blocks**
-- [ ] Validate config (error on invalid directives, missing required fields)
-- [ ] Test: parse various config files, print parsed structure
+- [x] Handle **default values** for missing directives
+- [x] Handle **multiple server blocks**
+- [x] Validate config (error on invalid directives, missing required fields)
+- [x] Test: parse various config files, print parsed structure
 
 ### Example Config File
 ```nginx
@@ -245,27 +245,27 @@ server {
 ```
 
 ### Phase 2 — CGI Handler (Week 2–4)
-- [ ] Implement `CgiHandler` class
-- [ ] Detect CGI requests by **file extension** (e.g., `.py`, `.php`)
-- [ ] Set up CGI **environment variables**:
+- [x] Implement `CgiHandler` class
+- [x] Detect CGI requests by **file extension** (e.g., `.py`, `.php`)
+- [x] Set up CGI **environment variables**:
   - `REQUEST_METHOD`, `QUERY_STRING`, `CONTENT_TYPE`, `CONTENT_LENGTH`
   - `SCRIPT_NAME`, `PATH_INFO`, `PATH_TRANSLATED`
   - `SERVER_NAME`, `SERVER_PORT`, `SERVER_PROTOCOL`
   - `HTTP_*` (forwarded headers)
-- [ ] Execute CGI via `fork()` + `execve()`
-- [ ] Pipe request body to CGI's `stdin` (for POST)
-- [ ] Read CGI's `stdout` for the response
-- [ ] Parse CGI output headers (e.g., `Content-Type`, `Status`)
-- [ ] Handle **CGI timeout** (kill process if it runs too long)
-- [ ] Make CGI execution **non-blocking** (integrate with Person A's event loop)
-- [ ] Handle chunked request bodies (un-chunk before sending to CGI)
-- [ ] Test with a Python CGI script and/or PHP-CGI
+- [x] Execute CGI via `fork()` + `execve()`
+- [x] Pipe request body to CGI's `stdin` (for POST)
+- [x] Read CGI's `stdout` for the response
+- [x] Parse CGI output headers (e.g., `Content-Type`, `Status`)
+- [x] Handle **CGI timeout** (kill process if it runs too long)
+- [x] Make CGI execution **non-blocking** (integrate with Person A's event loop)
+- [x] Handle chunked request bodies (un-chunk before sending to CGI)
+- [x] Test with a Python CGI script and/or PHP-CGI
 
 ### Phase 3 — Integration & Edge Cases (Week 4–5)
-- [ ] Provide config data to Person A (ports, server blocks) and Person B (routes, locations)
-- [ ] Test CGI with a real browser (form submission → PHP/Python processing)
-- [ ] Ensure CGI child processes are properly reaped (`waitpid`)
-- [ ] Handle CGI errors gracefully (return `500` on failure)
+- [x] Provide config data to Person A (ports, server blocks) and Person B (routes, locations)
+- [x] Test CGI with a real browser (form submission → PHP/Python processing)
+- [x] Ensure CGI child processes are properly reaped (`waitpid`)
+- [x] Handle CGI errors gracefully (return `500` on failure)
 
 ### What Person C Should Learn
 

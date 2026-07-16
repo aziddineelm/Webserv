@@ -3,8 +3,7 @@
 
 #include <string>
 #include <map>
-#include <cstdlib>
-#include <sstream>
+
 
 enum ParseState {
 	REQUEST_LINE,
@@ -29,6 +28,8 @@ public:
 	bool	hasError() const;
 	void	reset();
 
+	// Essential for preventing disk exhaustion during parsing
+	void	setMaxBodySize(size_t maxSize);
 
 	// Getters
 	const std::string&	getMethod() const;
@@ -58,6 +59,7 @@ private:
 	// Body-to-disk state (Phase 4 — prevents OOM on large uploads)
 	std::string		_bodyFilePath;
 	size_t			_bodyBytesWritten;
+	size_t			_maxBodySize;
 
 	// Parser state
 	ParseState		_state;

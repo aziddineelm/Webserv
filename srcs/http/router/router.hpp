@@ -3,7 +3,6 @@
 
 #include <string>
 #include <vector>
-#include <map>
 
 #include "../request/request.hpp"
 #include "../response/response.hpp"
@@ -16,55 +15,31 @@
 class Router {
 
 public:
-	Router();
-	Router(const Router &other);
-	Router &operator=(const Router &other);
-	~Router();
+  Router();
+  Router(const Router &other);
+  Router &operator=(const Router &other);
+  ~Router();
 
-	// The ONE method Person A calls after request is complete
-	void	handleRequest(const Request &req, Response &res,
-						  const std::vector<LocationConfig> &locations);
+  // The ONE method Person A calls after request is complete
+  void handleRequest(const Request &req, Response &res, const std::vector<LocationConfig> &locations);
+
+  // Step 1: Find the matching location (longest prefix)
+	static const LocationConfig* matchLocation(const std::string &uri, const std::vector<LocationConfig> &locations);
+
+  // Phase 5: Virtual Hosting — resolve the correct ServerConfig for a request.
+  // Must be called AFTER request is complete (Host header is available).
+  // Returns NULL only if no server block listens on listenPort at all.
+	static const ServerConfig* resolveVirtualHost(const Request &req, int listenPort, const std::vector<ServerConfig> &configs);
 
 private:
-	// Step 1: Find the matching location (longest prefix)
-	const LocationConfig	*_matchLocation(const std::string &uri, const std::vector<LocationConfig> &locations);
+  // Step 2: Check if the HTTP method is allowed
+	bool _isMethodAllowed(const std::string &method, const LocationConfig &loc);
 
-	// Step 2: Check if the HTTP method is allowed
-	bool	_isMethodAllowed(const std::string &method,
-							 const LocationConfig &loc);
+  // Step 3: Resolve URI → filesystem path
+	std::string _resolvePath(const std::string &uri, const LocationConfig &loc);
 
-	// Step 3: Resolve URI → filesystem path
-	std::string	_resolvePath(const std::string &uri,
-							 const LocationConfig &loc);
-
-	// Step 4: Serve different resource types
-	void	_serveFile(const std::string &filePath, Response &res);
-	void	_serveDirectory(const std::string &dirPath,
-							const std::string &uri,
-							const LocationConfig &loc, Response &res);
-	void	_generateDirListing(const std::string &dirPath,
-								const std::string &uri, Response &res);
-
-	// Step 5: POST/DELETE handlers
-	void	_handlePost(const Request &req, const LocationConfig &loc, Response &res);
-	void	_handleDelete(const Request &req, const LocationConfig &loc, Response &res);
-
-	// POST sub-handlers (SRP — thin orchestrator pattern)
-	void	_saveRawBody(const Request &req, const LocationConfig &loc, Response &res);
-	void	_saveMultipart(const Request &req, const LocationConfig &loc, const std::string &contentType, Response &res);
-
-	// Build error page using location's custom pages or fallback
-	void	_buildError(int code, const LocationConfig &loc, Response &res);
-
-	// Utility
-	static std::string	_getExtension(const std::string &path);
-	static bool			_fileExists(const std::string &path);
-	static bool			_isDirectory(const std::string &path);
-	static bool			_hasPathTraversal(const std::string &path);
-
-	// Multipart helpers
-	static std::string	_extractBoundary(const std::string &contentType);
-	static std::string	_extractFilenameFromHeaders(const std::string &headers);
+  // Step 5: DELETE handler
+	void _handleDelete(const Request &req, const LocationConfig &loc, Response &res);
 };
 
 #endif

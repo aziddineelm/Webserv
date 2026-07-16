@@ -57,7 +57,7 @@ namespace {
         return value == "allowed_methods" || value == "root" || value == "alias" ||
                value == "autoindex" || value == "index" || value == "return" ||
                value == "cgi_extension" || value == "cgi_path" || value == "upload_store" ||
-               value == "location" || value == "server";
+               value == "client_max_body_size" || value == "location" || value == "server";
     }
 }
 
@@ -198,6 +198,7 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
 
 void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end, ServerConfig& currentServer) {
     LocationConfig newLocation;
+    bool hasCustomMaxBody = false;
     
     if (it == end || *it == "{") {
         throw ConfigException("Missing path for location block");
@@ -279,6 +280,12 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         } else if (directive == "upload_store") {
             if (args.empty()) throw ConfigException("upload_store directive missing arguments");
             newLocation.upload_store = args[0];
+        } else if (directive == "client_max_body_size") {
+            if (args.empty()) throw ConfigException("client_max_body_size directive missing arguments");
+            size_t parsedSize = parseSizeWithUnit(args[0]);
+            if (parsedSize == 0) throw ConfigException("Invalid client_max_body_size: " + args[0]);
+            newLocation.client_max_body_size = parsedSize;
+            hasCustomMaxBody = true;
         } else {
             throw ConfigException("Unknown location directive: " + directive);
         }
@@ -299,8 +306,10 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
     if (newLocation.index.empty()) {
         newLocation.index = currentServer.index;
     }
-    // Inherit client_max_body_size from server
-    newLocation.client_max_body_size = currentServer.client_max_body_size;
+    // Inherit client_max_body_size from server only if not overridden in location
+    if (!hasCustomMaxBody) {
+        newLocation.client_max_body_size = currentServer.client_max_body_size;
+    }
     // Inherit error_pages from server
     newLocation.error_pages = currentServer.error_pages;
     

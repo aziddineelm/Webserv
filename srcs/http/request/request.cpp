@@ -1,13 +1,16 @@
 #include "request.hpp"
 #include <fstream>
 #include <unistd.h>
+#include <sstream>
+#include <cstdlib>
+#include <cctype>
 
 // ============================================================
 // Orthodox Canonical Form
 // ============================================================
 
 Request::Request()
-	: _bodyBytesWritten(0),
+	: _bodyBytesWritten(0), _maxBodySize(0),
 	  _state(REQUEST_LINE), _contentLength(0),
 	  _isChunked(false), _errorCode(0), _keepAlive(true) {}
 
@@ -32,6 +35,7 @@ Request &Request::operator=(const Request &other) {
 		_buffer = other._buffer;
 		_bodyFilePath = other._bodyFilePath;
 		_bodyBytesWritten = other._bodyBytesWritten;
+		_maxBodySize = other._maxBodySize;
 	}
 	return *this;
 }
@@ -89,11 +93,16 @@ void Request::reset() {
 	_headers.clear();
 	_body.clear();
 	_bodyBytesWritten = 0;
+	_maxBodySize = 0;
 	_state = REQUEST_LINE;
 	_contentLength = 0;
 	_isChunked = false;
 	_errorCode = 0;
 	_keepAlive = true;
+}
+
+void Request::setMaxBodySize(size_t maxSize) {
+	_maxBodySize = maxSize;
 }
 
 // ============================================================
@@ -309,6 +318,12 @@ void Request::_validateHeaders() {
 		_contentLength = static_cast<size_t>(cl);
 	}
 
+	// Early rejection if Content-Length exceeds limits
+	if (_maxBodySize > 0 && _contentLength > _maxBodySize) {
+		_setError(413);
+		return;
+	}
+
 	// Check Transfer-Encoding: chunked
 	std::map<std::string, std::string>::const_iterator teIt = _headers.find("transfer-encoding");
 	if (teIt != _headers.end()) {
@@ -439,6 +454,12 @@ void Request::_parseBody() {
 	if (_bodyFilePath.empty())
 		_bodyFilePath = _generateTempPath();
 
+	// Reject if this write pushes us over the limit
+	if (_maxBodySize > 0 && _bodyBytesWritten + toWrite > _maxBodySize) {
+		_setError(413);
+		return;
+	}
+
 	// Append chunk to temp file — never accumulate full body in RAM
 	std::ofstream out(_bodyFilePath.c_str(), std::ios::binary | std::ios::app);
 	if (!out.is_open()) {
@@ -446,6 +467,11 @@ void Request::_parseBody() {
 		return;
 	}
 	out.write(_buffer.c_str(), toWrite);
+	if (out.fail() || out.bad()) {
+		out.close();
+		_setError(500); // 500 Internal Server Error (Disk Full)
+		return;
+	}
 	out.close();
 
 	_buffer.erase(0, toWrite);
@@ -495,12 +521,23 @@ void Request::_parseChunkedBody() {
 
 		// Write chunk data directly from buffer — no intermediate string
 		size_t csz = static_cast<size_t>(chunkSize);
+
+		// Reject if this chunk pushes us over the limit
+		if (_maxBodySize > 0 && _bodyBytesWritten + csz > _maxBodySize) {
+			_setError(413);
+			return;
+		}
 		std::ofstream out(_bodyFilePath.c_str(), std::ios::binary | std::ios::app);
 		if (!out.is_open()) {
 			_setError(500);
 			return;
 		}
 		out.write(_buffer.c_str() + pos + 2, csz);
+		if (out.fail() || out.bad()) {
+			out.close();
+			_setError(500); // Disk Full
+			return;
+		}
 		out.close();
 
 		_bodyBytesWritten += csz;

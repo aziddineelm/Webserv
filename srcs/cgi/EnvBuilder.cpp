@@ -202,7 +202,7 @@ std::vector<std::string> EnvBuilder::buildFromRequest(const Request& req, const 
         portStr.str(),
         "",             // remoteAddr — only Person A knows this from accept()
         req.getPath(),  // scriptName
-        "",             // pathInfo — depends on CGI script path resolution
+        req.getPath(),  // pathInfo — RFC 3875 / 42 cgi_tester require PATH_INFO
         req.getVersion(),
         contentLength,
         contentType
