@@ -140,7 +140,8 @@ void PostHandler::_saveMultipart(const Request &req, const LocationConfig &loc, 
 	if (lastBs != std::string::npos)
 		filename = filename.substr(lastBs + 1);
 	if (filename.empty() || HttpUtils::hasPathTraversal(filename)) {
-		HttpUtils::buildErrorPage(400, loc, res); return;
+		HttpUtils::buildErrorPage(400, loc, res);
+		return;
 	}
 
 	std::string savePath = loc.upload_store;
