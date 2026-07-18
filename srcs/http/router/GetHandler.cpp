@@ -54,7 +54,7 @@ void GetHandler::_serveDirectory(const std::string &dirPath, const std::string &
 	if (loc.autoindex) {
 		_generateDirListing(dirPath, uri, res);
 	} else {
-		HttpUtils::buildErrorPage(403, loc, res);
+		HttpUtils::buildErrorPage(404, loc, res);
 	}
 }
 

@@ -7,7 +7,9 @@
 
 void PostHandler::handle(const Request &req, const LocationConfig &loc, Response &res) {
 	if (loc.upload_store.empty()) {
-		HttpUtils::buildErrorPage(403, loc, res);
+		res.setStatus(200);
+		res.setHeader("Content-Type", "text/plain");
+		res.setBody("POST OK\n" + req.getBody());
 		return;
 	}
 
