@@ -12,6 +12,10 @@ public:
 	static bool			fileExists(const std::string &path);
 	static bool			isDirectory(const std::string &path);
 	static bool			hasPathTraversal(const std::string &path);
+
+	// Bonus: Cookie & Session helpers
+	static std::string	extractCookieValue(const std::string &cookieHeader, const std::string &key);
+	static bool			isStaticAsset(const std::string &path);
 };
 
 #endif

@@ -2,6 +2,7 @@
 #include "HttpUtils.hpp"
 #include "PostHandler.hpp"
 #include "GetHandler.hpp"
+#include "SessionManager.hpp"
 #include <unistd.h>
 // ============================================================
 // Orthodox Canonical Form
@@ -30,20 +31,22 @@ Router::~Router() {}
 //
 
 void Router::handleRequest(const Request &req, Response &res, const std::vector<LocationConfig> &locations) {
+	// 1. Match location (longest prefix)
+	const LocationConfig *loc = matchLocation(req.getPath(), locations);
+
 	// If the request itself has errors, respond immediately
 	if (req.hasError()) {
 		int code = req.getErrorCode();
 		if (code == 0)
 			code = 400;
-		const LocationConfig *errLoc = matchLocation(req.getPath(), locations);
-		if (errLoc)
-			HttpUtils::buildErrorPage(code, *errLoc, res);
+		
+		if (loc)
+			HttpUtils::buildErrorPage(code, *loc, res);
 		else
 			res.buildErrorPage(code);
 		return;
 	}
 
-	const LocationConfig *loc = matchLocation(req.getPath(), locations);
 	if (!loc) {
 		res.buildErrorPage(404);
 		return;
@@ -77,25 +80,29 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		return;
 	}
 
-	// 6. Check for CGI dispatch (handles GET, POST, etc.)
+	// 6. Route the request (CGI vs Method)
 	std::string ext = HttpUtils::getExtension(filePath);
 	if (!ext.empty() && loc->cgi_map.find(ext) != loc->cgi_map.end()) {
+		// CGI dispatch (handles GET, POST, etc.)
 		res.setCgiScript(filePath, loc->cgi_map.find(ext)->second);
-		return;
-	}
-
-	// 7. Route non-CGI requests by method
-	if (req.getMethod() == "DELETE") {
-		_handleDelete(req, *loc, res);
-		return;
-	}
-	if (req.getMethod() == "POST") {
+	} else if (req.getMethod() == "DELETE") {
+		_handleDelete(filePath, *loc, res);
+	} else if (req.getMethod() == "POST") {
 		PostHandler::handle(req, *loc, res);
-		return;
+	} else {
+		// Serve GET static file or directory
+		GetHandler::handle(req, *loc, filePath, res);
 	}
 
-	// 8. Serve GET static file
-	GetHandler::handle(req, *loc, filePath, res);
+	// --- BONUS: POST-PROCESSING SESSION MANAGEMENT ---
+	// Only attach sessions to SUCCESSFUL requests (prevent 404-scan memory bloat)
+	// and skip static assets (.css, .png) to mimic NGINX high-performance.
+	// int status = res.getStatusCode();
+	// if (status >= 200 && status < 300) {
+	// 	if (!HttpUtils::isStaticAsset(req.getPath())) {
+	// 		SessionManager::attachSession(req, res);
+	// 	}
+	// }
 }
 
 // ============================================================
@@ -113,8 +120,7 @@ const LocationConfig *Router::matchLocation(const std::string &uri, const std::v
 		if (uri.compare(0, prefix.size(), prefix) == 0) {
 			// For non-root locations, ensure we match at a boundary
 			// e.g., /images should NOT match /img
-			if (prefix != "/" && prefix.size() < uri.size()
-				&& uri[prefix.size()] != '/')
+			if (prefix != "/" && prefix.size() < uri.size() && uri[prefix.size()] != '/')
 				continue;
 
 			// Longest prefix wins
@@ -207,14 +213,7 @@ std::string Router::_resolvePath(const std::string &uri, const LocationConfig &l
 // Private: DELETE Handler
 // ============================================================
 
-void Router::_handleDelete(const Request &req, const LocationConfig &loc, Response &res) {
-	std::string filePath = _resolvePath(req.getPath(), loc);
-
-	if (filePath.empty() || HttpUtils::hasPathTraversal(filePath)) {
-		HttpUtils::buildErrorPage(403, loc, res);
-		return;
-	}
-
+void Router::_handleDelete(const std::string &filePath, const LocationConfig &loc, Response &res) {
 	// Cannot delete directories
 	if (HttpUtils::isDirectory(filePath)) {
 		HttpUtils::buildErrorPage(403, loc, res);

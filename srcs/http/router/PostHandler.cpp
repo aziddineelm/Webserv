@@ -89,7 +89,10 @@ void PostHandler::_saveMultipart(const Request &req, const LocationConfig &loc, 
 
 	if (fromFile) {
 		bodyFile.open(bodySource.c_str(), std::ios::binary);
-		if (!bodyFile.is_open()) { HttpUtils::buildErrorPage(500, loc, res); return; }
+		if (!bodyFile.is_open()) {
+			HttpUtils::buildErrorPage(500, loc, res);
+			return;
+		}
 		struct stat st;
 		if (stat(bodySource.c_str(), &st) != 0) {
 			HttpUtils::buildErrorPage(500, loc, res);
@@ -102,7 +105,8 @@ void PostHandler::_saveMultipart(const Request &req, const LocationConfig &loc, 
 	}
 
 	size_t headerBufSize = 4096;
-	if (headerBufSize > bodySize) headerBufSize = bodySize;
+	if (headerBufSize > bodySize)
+		headerBufSize = bodySize;
 	std::string headerBuf(headerBufSize, '\0');
 	if (fromFile) {
 		bodyFile.read(&headerBuf[0], headerBufSize);
@@ -112,30 +116,46 @@ void PostHandler::_saveMultipart(const Request &req, const LocationConfig &loc, 
 	}
 
 	size_t bndPos = headerBuf.find(fullBoundary);
-	if (bndPos == std::string::npos) { HttpUtils::buildErrorPage(400, loc, res); return; }
+	if (bndPos == std::string::npos) {
+		HttpUtils::buildErrorPage(400, loc, res);
+		return;
+	}
 
 	size_t headersStart = bndPos + fullBoundary.size() + 2;
 	size_t dataStart    = headerBuf.find("\r\n\r\n", headersStart);
-	if (dataStart == std::string::npos) { HttpUtils::buildErrorPage(400, loc, res); return; }
+	if (dataStart == std::string::npos) {
+		HttpUtils::buildErrorPage(400, loc, res);
+		return;
+	}
 
 	std::string partHeaders = headerBuf.substr(headersStart, dataStart - headersStart);
 	std::string filename    = _extractFilenameFromHeaders(partHeaders);
-	if (filename.empty()) { HttpUtils::buildErrorPage(400, loc, res); return; }
+	if (filename.empty()) {
+		HttpUtils::buildErrorPage(400, loc, res);
+		return;
+	}
 
 	size_t lastSlash = filename.rfind('/');
-	if (lastSlash != std::string::npos) filename = filename.substr(lastSlash + 1);
+	if (lastSlash != std::string::npos)
+		filename = filename.substr(lastSlash + 1);
 	size_t lastBs = filename.rfind('\\');
-	if (lastBs != std::string::npos) filename = filename.substr(lastBs + 1);
+	if (lastBs != std::string::npos)
+		filename = filename.substr(lastBs + 1);
 	if (filename.empty() || HttpUtils::hasPathTraversal(filename)) {
-		HttpUtils::buildErrorPage(400, loc, res); return;
+		HttpUtils::buildErrorPage(400, loc, res);
+		return;
 	}
 
 	std::string savePath = loc.upload_store;
-	if (savePath[savePath.size() - 1] != '/') savePath += "/";
+	if (savePath[savePath.size() - 1] != '/')
+		savePath += "/";
 	savePath += filename;
 
 	std::ofstream outFile(savePath.c_str(), std::ios::binary);
-	if (!outFile.is_open()) { HttpUtils::buildErrorPage(500, loc, res); return; }
+	if (!outFile.is_open()) {
+		HttpUtils::buildErrorPage(500, loc, res);
+		return;
+	}
 
 	if (fromFile)
 		bodyFile.seekg(static_cast<std::streamoff>(dataStart + 4));
@@ -147,7 +167,8 @@ void PostHandler::_saveMultipart(const Request &req, const LocationConfig &loc, 
 
 	while (bodyPos < bodySize && !foundEnd) {
 		size_t toRead = sizeof(readBuf);
-		if (bodyPos + toRead > bodySize) toRead = bodySize - bodyPos;
+		if (bodyPos + toRead > bodySize)
+			toRead = bodySize - bodyPos;
 
 		size_t bytesRead = 0;
 		if (fromFile) {
@@ -165,9 +186,9 @@ void PostHandler::_saveMultipart(const Request &req, const LocationConfig &loc, 
 			outFile.write(combined.c_str(), endPos);
 			foundEnd = true;
 		} else {
-			size_t safeWrite = (combined.size() > endMarker.size())
-							   ? combined.size() - endMarker.size() : 0;
-			if (safeWrite > 0) outFile.write(combined.c_str(), safeWrite);
+			size_t safeWrite = (combined.size() > endMarker.size()) ? combined.size() - endMarker.size() : 0;
+			if (safeWrite > 0)
+				outFile.write(combined.c_str(), safeWrite);
 			carryOver = combined.substr(safeWrite);
 		}
 	}
