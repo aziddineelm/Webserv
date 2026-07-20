@@ -182,6 +182,17 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
     }
     ++it; // Skip '}'
     
+    // If no root location was explicitly defined, add a default one
+    if (newServer.locations.find("/") == newServer.locations.end()) {
+        LocationConfig defaultLoc;
+        defaultLoc.path = "/";
+        defaultLoc.root = newServer.root;
+        defaultLoc.index = newServer.index;
+        defaultLoc.client_max_body_size = newServer.client_max_body_size;
+        defaultLoc.error_pages = newServer.error_pages;
+        newServer.locations["/"] = defaultLoc;
+    }
+    
     _servers.push_back(newServer);
 }
 
