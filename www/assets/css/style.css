@@ -119,7 +119,7 @@ body::after {
 }
 
 .hero__title {
-  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-size: clamp(7rem, 5vw, 3.2rem);
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--text-primary);

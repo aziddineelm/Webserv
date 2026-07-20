@@ -69,6 +69,12 @@
       vid.controls = true;
       vid.style.cssText = 'max-width:100%;border-radius:12px;margin-top:10px;';
       bodyEl.appendChild(vid);
+    } else if (mediaOpts && mediaOpts.type === 'html') {
+      bodyEl.innerHTML = output + '── Preview ──\n';
+      const iframe = document.createElement('iframe');
+      iframe.srcdoc = body;
+      iframe.style.cssText = 'width:100%;height:400px;border:none;border-radius:12px;margin-top:10px;background:#fff;';
+      bodyEl.appendChild(iframe);
     } else {
       output += '── Body ──\n';
       output += body || '(empty)';
@@ -132,7 +138,7 @@
           showResponse('get-response', res.status, res.headers, '', { type: 'video', url });
         } else {
           const body = await res.text();
-          showResponse('get-response', res.status, res.headers, body);
+          showResponse('get-response', res.status, res.headers, body, { type: ct.includes('html') ? 'html' : undefined });
         }
         toast(`GET ${res.status} — ${res.statusText}`, res.ok ? 'success' : 'error');
       } catch (err) {
@@ -168,8 +174,9 @@
             headers: { 'Content-Type': contentType },
             body: body,
           });
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
           const text = await res.text();
-          showResponse('post-response', res.status, res.headers, text);
+          showResponse('post-response', res.status, res.headers, text, { type: ct.includes('html') ? 'html' : undefined });
           toast(`POST ${res.status} — ${res.statusText}`, res.ok ? 'success' : 'error');
         } catch (err) {
           showResponse('post-response', 0, null, `Error: ${err.message}`);
@@ -197,8 +204,9 @@
 
         try {
           const res = await fetch(url, { method: 'POST', body: formData });
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
           const text = await res.text();
-          showResponse('post-response', res.status, res.headers, text);
+          showResponse('post-response', res.status, res.headers, text, { type: ct.includes('html') ? 'html' : undefined });
           toast(`Upload ${res.status} — ${res.statusText}`, res.ok ? 'success' : 'error');
 
         } catch (err) {
@@ -236,8 +244,9 @@
 
       try {
         const res = await fetch(url, { method: 'DELETE' });
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
         const body = await res.text();
-        showResponse('delete-response', res.status, res.headers, body);
+        showResponse('delete-response', res.status, res.headers, body, { type: ct.includes('html') ? 'html' : undefined });
         toast(`DELETE ${res.status} — ${res.statusText}`, res.ok ? 'success' : 'error');
 
       } catch (err) {
@@ -269,8 +278,9 @@
             opts.body = body;
           }
           const res = await fetch(`/cgi-bin/${script}`, opts);
+          const ct = (res.headers.get('content-type') || '').toLowerCase();
           const text = await res.text();
-          showResponse('cgi-response', res.status, res.headers, text);
+          showResponse('cgi-response', res.status, res.headers, text, { type: ct.includes('html') ? 'html' : undefined });
           toast(`CGI ${res.status} — ${script}`, res.ok ? 'success' : 'error');
         } catch (err) {
           showResponse('cgi-response', 0, null, `Error: ${err.message}`);
@@ -405,8 +415,9 @@
     const qs = new URLSearchParams({ action, ...params }).toString();
     try {
       const res = await fetch(`/cgi-bin/session.py?${qs}`);
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
       const text = await res.text();
-      showResponse('cookie-response', res.status, res.headers, text);
+      showResponse('cookie-response', res.status, res.headers, text, { type: ct.includes('html') ? 'html' : undefined });
       toast(`${action} — ${res.status}`, res.ok ? 'success' : 'error');
       // Refresh cookie viewer after CGI call
       setTimeout(renderCookieViewer, 200);
