@@ -1,12 +1,405 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Webserv</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Webserv — A lightweight HTTP server built from scratch in C++. Test GET, POST, DELETE methods and CGI scripts." />
+  <title>Webserv — Dashboard</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/assets/css/style.css" />
 </head>
 <body>
-	<h1>Welcome to Webserv!</h1>
-	<p>Your web server is running.</p>
+
+  <!-- ═══════ Theme Toggle ═══════ -->
+  <button class="theme-toggle" id="theme-toggle" title="Toggle dark / light theme">☀️</button>
+
+  <div class="page-wrapper">
+
+    <!-- ═══════ Hero ═══════ -->
+    <header class="hero">
+      <div class="hero__logo">⚡</div>
+      <h1 class="hero__title">Webserv</h1>
+      <p class="hero__subtitle">Your lightweight HTTP server — built from scratch in C++98. Test every endpoint right here.</p>
+      <div class="hero__status">
+        <span class="hero__status-dot"></span>
+        Server running on port 8080
+      </div>
+    </header>
+
+    <!-- ═══════ Navigation ═══════ -->
+    <nav class="nav-tabs" id="main-nav">
+      <button class="nav-tabs__btn active" data-target="section-get">GET</button>
+      <button class="nav-tabs__btn" data-target="section-post">POST</button>
+      <button class="nav-tabs__btn" data-target="section-delete">DELETE</button>
+      <button class="nav-tabs__btn" data-target="section-cgi">CGI Scripts</button>
+      <button class="nav-tabs__btn" data-target="section-cookies">Cookies & Sessions</button>
+    </nav>
+
+    <!-- ═══════════════════════════════════
+         SECTION: GET
+    ═══════════════════════════════════ -->
+    <section class="section active" id="section-get">
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--get">↓</div>
+          <div>
+            <div class="card__title">GET Request <span class="badge badge--get">GET</span></div>
+            <div class="card__desc">Fetch resources from the server</div>
+          </div>
+        </div>
+
+        <form id="get-form" autocomplete="off">
+          <div class="form-group">
+            <label for="get-url">Request URL</label>
+            <input class="input" type="text" id="get-url" placeholder="e.g. /index.html or /uploads/" value="/" />
+          </div>
+          <button class="btn btn--primary" type="submit">⚡ Send GET</button>
+        </form>
+
+        <div class="response-panel" id="get-response">
+          <div class="response-panel__header">
+            <span>Response</span>
+            <span class="response-panel__status"></span>
+          </div>
+          <pre class="response-panel__body"></pre>
+        </div>
+      </div>
+
+      <!-- Quick-access shortcuts -->
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--get">🔗</div>
+          <div>
+            <div class="card__title">Quick Endpoints</div>
+            <div class="card__desc">Common paths to test</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn--ghost quick-get" data-url="/">/ (root)</button>
+          <button class="btn btn--ghost quick-get" data-url="/index.html">/index.html</button>
+          <button class="btn btn--ghost quick-get" data-url="/uploads/">/uploads/</button>
+          <button class="btn btn--ghost quick-get" data-url="/nonexistent">/nonexistent (404)</button>
+          <button class="btn btn--ghost quick-get" data-url="/redirect">/redirect (301)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════
+         SECTION: POST
+    ═══════════════════════════════════ -->
+    <section class="section" id="section-post">
+
+      <!-- Post text / JSON -->
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--post">↑</div>
+          <div>
+            <div class="card__title">POST — Text / JSON <span class="badge badge--post">POST</span></div>
+            <div class="card__desc">Send text or JSON payloads to the server</div>
+          </div>
+        </div>
+
+        <form id="post-text-form" autocomplete="off">
+          <div class="form-row">
+            <div class="form-group" style="flex:2">
+              <label for="post-url">Request URL</label>
+              <input class="input" type="text" id="post-url" placeholder="e.g. /upload" value="/upload" />
+            </div>
+            <div class="form-group" style="flex:1">
+              <label for="post-content-type">Content-Type</label>
+              <select class="select" id="post-content-type">
+                <option value="text/plain">text/plain</option>
+                <option value="application/json">application/json</option>
+                <option value="application/x-www-form-urlencoded">form-urlencoded</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="post-body">Request Body</label>
+            <textarea class="textarea" id="post-body" placeholder='{"key": "value"} or plain text…'></textarea>
+          </div>
+          <button class="btn btn--success" type="submit">📤 Send POST</button>
+        </form>
+      </div>
+
+      <!-- Post file upload -->
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--post">📎</div>
+          <div>
+            <div class="card__title">POST — File Upload <span class="badge badge--post">POST</span></div>
+            <div class="card__desc">Upload a file via multipart form data</div>
+          </div>
+        </div>
+
+        <form id="post-file-form" autocomplete="off">
+          <div class="form-group">
+            <label for="post-file-url">Upload URL</label>
+            <input class="input" type="text" id="post-file-url" placeholder="e.g. /upload" value="/upload" />
+          </div>
+          <div class="form-group">
+            <label>File</label>
+            <div class="file-drop">
+              <div class="file-drop__icon">📁</div>
+              <div class="file-drop__text">Drop a file here or <span>browse</span></div>
+              <input type="file" id="post-file-input" />
+            </div>
+            <div class="file-name" id="post-file-name"></div>
+          </div>
+          <button class="btn btn--success" type="submit">⬆️ Upload File</button>
+        </form>
+      </div>
+
+      <!-- Shared response panel -->
+      <div class="response-panel" id="post-response">
+        <div class="response-panel__header">
+          <span>Response</span>
+          <span class="response-panel__status"></span>
+        </div>
+        <pre class="response-panel__body"></pre>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════
+         SECTION: DELETE
+    ═══════════════════════════════════ -->
+    <section class="section" id="section-delete">
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--delete">✕</div>
+          <div>
+            <div class="card__title">DELETE Request <span class="badge badge--delete">DELETE</span></div>
+            <div class="card__desc">Remove a resource from the server</div>
+          </div>
+        </div>
+
+        <form id="delete-form" autocomplete="off">
+          <div class="form-group">
+            <label for="delete-url">Resource URL</label>
+            <input class="input" type="text" id="delete-url" placeholder="e.g. /uploads/filename.txt" value="/uploads/" />
+          </div>
+          <button class="btn btn--danger" type="submit">🗑 Send DELETE</button>
+        </form>
+
+        <div class="response-panel" id="delete-response">
+          <div class="response-panel__header">
+            <span>Response</span>
+            <span class="response-panel__status"></span>
+          </div>
+          <pre class="response-panel__body"></pre>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--delete">💡</div>
+          <div>
+            <div class="card__title">How It Works</div>
+            <div class="card__desc">Tips for the DELETE method</div>
+          </div>
+        </div>
+        <p style="font-size:0.88rem;color:var(--text-secondary);line-height:1.7;">
+          The <code style="background:rgba(255,69,58,0.08);color:#ff453a;padding:2px 6px;border-radius:4px;font-family:var(--font-mono);font-size:0.82rem;">DELETE</code> method removes the resource at the given URL.
+          Try uploading a file in the <strong>POST</strong> section, then delete it by entering its path (e.g. <code style="background:rgba(0,0,0,0.05);padding:2px 6px;border-radius:4px;font-family:var(--font-mono);font-size:0.82rem;">/uploads/myfile.txt</code>).
+          You can also delete files directly from the <strong>Media Gallery</strong>.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════
+         SECTION: CGI
+    ═══════════════════════════════════ -->
+    <section class="section" id="section-cgi">
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--cgi">⚙</div>
+          <div>
+            <div class="card__title">CGI Scripts</div>
+            <div class="card__desc">Test the available CGI scripts on this server</div>
+          </div>
+        </div>
+
+        <div class="cgi-grid">
+
+          <!-- hello.py -->
+          <div class="cgi-card" data-script="hello.py" data-method="GET">
+            <div class="cgi-card__name">hello.py</div>
+            <div class="cgi-card__desc">Simple hello world script — returns a greeting message via GET.</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+          <!-- echo.py -->
+          <div class="cgi-card" data-script="echo.py" data-method="POST">
+            <div class="cgi-card__name">echo.py</div>
+            <div class="cgi-card__desc">Echoes back the request body sent via POST.</div>
+            <div class="cgi-card__input">
+              <textarea class="textarea cgi-input" rows="2" placeholder="Type something to echo…"></textarea>
+            </div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+          <!-- post_echo.py -->
+          <div class="cgi-card" data-script="post_echo.py" data-method="POST">
+            <div class="cgi-card__name">post_echo.py</div>
+            <div class="cgi-card__desc">Echoes POST body with Content-Length header.</div>
+            <div class="cgi-card__input">
+              <textarea class="textarea cgi-input" rows="2" placeholder="Enter body text…"></textarea>
+            </div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+          <!-- status.py -->
+          <div class="cgi-card" data-script="status.py" data-method="GET">
+            <div class="cgi-card__name">status.py</div>
+            <div class="cgi-card__desc">Returns a 404 status — useful for testing error handling.</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="response-panel" id="cgi-response">
+        <div class="response-panel__header">
+          <span>CGI Response</span>
+          <span class="response-panel__status"></span>
+        </div>
+        <pre class="response-panel__body"></pre>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════
+         SECTION: Cookies & Sessions
+    ═══════════════════════════════════ -->
+    <section class="section" id="section-cookies">
+
+      <!-- Cookie Viewer -->
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--cookie">🍪</div>
+          <div>
+            <div class="card__title">Active Cookies</div>
+            <div class="card__desc">Browser cookies currently set for this domain</div>
+          </div>
+        </div>
+        <div id="cookie-viewer" class="cookie-list">
+          <p style="color:var(--text-muted);font-size:0.88rem;">Loading…</p>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn--ghost" id="cookie-refresh-btn">↻ Refresh</button>
+          <button class="btn btn--danger" id="cookie-clear-all-btn" style="font-size:0.84rem;padding:10px 20px;">🗑 Clear All Cookies</button>
+        </div>
+      </div>
+
+      <!-- Set Cookie -->
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--cookie">✏️</div>
+          <div>
+            <div class="card__title">Set a Cookie</div>
+            <div class="card__desc">Create or update a cookie via the CGI session script</div>
+          </div>
+        </div>
+        <form id="cookie-set-form" autocomplete="off">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="cookie-name">Cookie Name</label>
+              <input class="input" type="text" id="cookie-name" placeholder="e.g. username" value="test_cookie" />
+            </div>
+            <div class="form-group">
+              <label for="cookie-value">Cookie Value</label>
+              <input class="input" type="text" id="cookie-value" placeholder="e.g. John" value="hello_webserv" />
+            </div>
+            <div class="form-group" style="flex:0.6">
+              <label for="cookie-maxage">Max-Age (s)</label>
+              <input class="input" type="number" id="cookie-maxage" value="3600" min="0" />
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn btn--primary" type="submit">🍪 Set Cookie</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Delete Cookie -->
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--delete">✕</div>
+          <div>
+            <div class="card__title">Delete a Cookie</div>
+            <div class="card__desc">Remove a specific cookie by name</div>
+          </div>
+        </div>
+        <form id="cookie-delete-form" autocomplete="off">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="cookie-delete-name">Cookie Name</label>
+              <input class="input" type="text" id="cookie-delete-name" placeholder="e.g. test_cookie" value="test_cookie" />
+            </div>
+          </div>
+          <div style="margin-top:16px;">
+            <button class="btn btn--danger" type="submit">🗑 Delete Cookie</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Session Management -->
+      <div class="card">
+        <div class="card__header">
+          <div class="card__icon card__icon--session">🔐</div>
+          <div>
+            <div class="card__title">Session Management</div>
+            <div class="card__desc">Create or destroy a server-side session via CGI</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn--success" id="session-create-btn">🔑 Create / Check Session</button>
+          <button class="btn btn--danger" id="session-destroy-btn">💥 Destroy Session</button>
+          <button class="btn btn--ghost" id="session-status-btn">📋 Cookie Status</button>
+        </div>
+      </div>
+
+      <!-- Response -->
+      <div class="response-panel" id="cookie-response">
+        <div class="response-panel__header">
+          <span>Cookie / Session Response</span>
+          <span class="response-panel__status"></span>
+        </div>
+        <pre class="response-panel__body"></pre>
+      </div>
+    </section>
+
+  </div><!-- /.page-wrapper -->
+
+  <!-- ═══════ Lightbox ═══════ -->
+  <div class="lightbox" id="lightbox">
+    <button class="lightbox__close">✕</button>
+    <div id="lightbox-content"></div>
+  </div>
+
+  <!-- ═══════ Toast Container ═══════ -->
+  <div class="toast-container"></div>
+
+  <!-- Quick-GET shortcut wiring (inline, tiny) -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.quick-get').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const urlInput = document.getElementById('get-url');
+          if (urlInput) urlInput.value = btn.dataset.url;
+          document.getElementById('get-form').dispatchEvent(new Event('submit', { cancelable: true }));
+        });
+      });
+    });
+  </script>
+
+  <!-- App Logic -->
+  <script src="/assets/js/app.js"></script>
+
 </body>
 </html>
