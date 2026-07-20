@@ -121,14 +121,14 @@ void Response::buildFromCgiOutput(const std::string &rawCgiOutput) {
 	std::map<std::string, std::string>::iterator sit = cgiHeaders.find("Status");
 	if (sit != cgiHeaders.end()) {
 		statusCode = std::atoi(sit->second.c_str());
-		if (statusCode <= 0) statusCode = 200;
+		if (statusCode <= 0)
+			statusCode = 200;
 		cgiHeaders.erase(sit);
 	}
 	setStatus(statusCode);
 
 	// Copy CGI headers into the HTTP response
-	for (std::map<std::string, std::string>::iterator hi = cgiHeaders.begin();
-		 hi != cgiHeaders.end(); ++hi) {
+	for (std::map<std::string, std::string>::iterator hi = cgiHeaders.begin(); hi != cgiHeaders.end(); ++hi) {
 		setHeader(hi->first, hi->second);
 	}
 

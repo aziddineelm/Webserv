@@ -41,7 +41,8 @@ void GetHandler::_serveDirectory(const std::string &dirPath, const std::string &
 
 	if (!loc.index.empty()) {
 		std::string indexPath = dirPath;
-		if (indexPath[indexPath.size() - 1] != '/') indexPath += "/";
+		if (indexPath[indexPath.size() - 1] != '/')
+			indexPath += "/";
 		indexPath += loc.index;
 
 		if (HttpUtils::fileExists(indexPath)) {
