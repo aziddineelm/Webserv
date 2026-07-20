@@ -127,6 +127,21 @@ std::vector<std::string> EnvBuilder::build(const std::map<std::string, std::stri
         envMap["SERVER_SOFTWARE"] = serverSoftware.empty() ? "webserv" : serverSoftware;
     }
 
+    // php-cgi requires REDIRECT_STATUS to be set (security measure).
+    if (!hasKey(envMap, "REDIRECT_STATUS")) envMap["REDIRECT_STATUS"] = "200";
+
+    // php-cgi uses SCRIPT_FILENAME to locate the script on disk.
+    const std::string scriptFilename = getFirst(requestMeta, "script_filename", "SCRIPT_FILENAME");
+    if (!scriptFilename.empty()) {
+        envMap["SCRIPT_FILENAME"] = scriptFilename;
+    } else if (hasKey(envMap, "SCRIPT_NAME")) {
+        // Fallback: build from document_root + SCRIPT_NAME
+        const std::string docRoot = getFirst(requestMeta, "document_root", "root", "DOCUMENT_ROOT");
+        if (!docRoot.empty()) {
+            envMap["SCRIPT_FILENAME"] = docRoot + envMap["SCRIPT_NAME"];
+        }
+    }
+
     std::vector<std::string> env;
     for (std::map<std::string, std::string>::const_iterator it = envMap.begin(); it != envMap.end(); ++it) {
         env.push_back(it->first + std::string("=") + it->second);

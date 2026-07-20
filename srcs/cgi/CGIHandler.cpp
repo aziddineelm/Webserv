@@ -166,6 +166,19 @@ bool CGIHandler::startFromRequest(const Request& req,
         resolvedScript = resolvedBuf;
     }
 
+    // Ensure SCRIPT_FILENAME is set for php-cgi
+    bool hasScriptFilename = false;
+    for (size_t i = 0; i < envVars.size(); ++i) {
+        if (envVars[i].compare(0, 16, "SCRIPT_FILENAME=") == 0) {
+            envVars[i] = "SCRIPT_FILENAME=" + resolvedScript;
+            hasScriptFilename = true;
+            break;
+        }
+    }
+    if (!hasScriptFilename) {
+        envVars.push_back("SCRIPT_FILENAME=" + resolvedScript);
+    }
+
     std::string bodyFilePath = req.getBodyFilePath();
     if (!bodyFilePath.empty()) {
         return startFromFile(resolvedScript, interpreterPath, envVars, bodyFilePath, timeoutSeconds);
