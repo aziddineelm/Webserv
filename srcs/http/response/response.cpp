@@ -228,7 +228,11 @@ std::string Response::getReasonPhrase(int code) {
 		// 5xx Server Error
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
+		case 502: return "Bad Gateway";
 		case 503: return "Service Unavailable";
+		case 504: return "Gateway Timeout";
+		// 4xx (additional)
+		case 408: return "Request Timeout";
 		default:  return "Unknown";
 	}
 }
