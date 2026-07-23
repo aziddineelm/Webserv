@@ -23,9 +23,8 @@
 
     <!-- ═══════ Hero ═══════ -->
     <header class="hero">
-      <div class="hero__logo">⚡</div>
       <h1 class="hero__title">Webserv</h1>
-      <p class="hero__subtitle">Your lightweight HTTP server — built from scratch in C++98. Test every endpoint right here.</p>
+      <p class="hero__subtitle">A lightweight HTTP server — built from scratch in C++98. Test every endpoint right here.</p>
       <div class="hero__status">
         <span class="hero__status-dot"></span>
         Server running on port 8080
@@ -59,7 +58,7 @@
             <label for="get-url">Request URL</label>
             <input class="input" type="text" id="get-url" placeholder="e.g. /index.html or /uploads/" value="/" />
           </div>
-          <button class="btn btn--primary" type="submit">⚡ Send GET</button>
+          <button class="btn btn--primary" type="submit">Send GET</button>
         </form>
 
         <div class="response-panel" id="get-response">
@@ -261,7 +260,42 @@
             <button class="btn btn--primary cgi-run-btn">▶ Run</button>
           </div>
 
+          <!-- timeout_test.py -->
+          <div class="cgi-card" data-script="timeout_test.py" data-method="GET">
+            <div class="cgi-card__name">timeout_test.py</div>
+            <div class="cgi-card__desc">A script that intentionally never finishes — useful for testing timeout handling.</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+          <!-- Session Test py -->
+          <div class="cgi-card" data-script="session.py" data-method="GET">
+            <div class="cgi-card__name">session.py</div>
+            <div class="cgi-card__desc">Tests session handling by maintaining a counter across requests.</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+          <!-- Info PHP -->
+          <div class="cgi-card" data-script="info.php" data-method="GET">
+            <div class="cgi-card__name">info.php</div>
+            <div class="cgi-card__desc">Outputs PHP configuration details and phpinfo().</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+          <!-- Time PHP -->
+          <div class="cgi-card" data-script="time.php" data-method="GET">
+            <div class="cgi-card__name">time.php</div>
+            <div class="cgi-card__desc">Returns the current server time and date in JSON format.</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
+          <!-- Env PHP -->
+          <div class="cgi-card" data-script="env.php" data-method="GET">
+            <div class="cgi-card__name">env.php</div>
+            <div class="cgi-card__desc">Returns the CGI environment variables received by the server.</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
         </div>
+          
       </div>
 
       <div class="response-panel" id="cgi-response">
@@ -399,7 +433,6 @@
   </script>
 
   <!-- App Logic -->
-  <script src="/assets/js/app.js"></script>
-
+  <script src="/assets/js/app.js"></script>footer>
 </body>
 </html>
