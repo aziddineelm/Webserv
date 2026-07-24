@@ -247,7 +247,12 @@ void EventLoop::_dispatchRequest(int clientFd, Client &client) {
 
 void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serverConfig) {
 	
-	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter(), CGI_TIMEOUT_SEC);
+	// Look up location-specific CGI timeouts from config
+	const LocationConfig* loc = serverConfig.matchLocation(client.request.getUri());
+	int idleTimeout = loc ? loc->cgi_idle_timeout : 30;
+	int maxTimeout  = loc ? loc->cgi_max_timeout  : 0;
+
+	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter(), idleTimeout, maxTimeout);
 
 	if (!started) {
 		std::cerr << "[EventLoop] CGI spawn failed (fd " << clientFd << ")" << std::endl;
