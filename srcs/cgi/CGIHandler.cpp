@@ -185,10 +185,12 @@ bool CGIHandler::startFromFile(const std::string& scriptPath,
 bool CGIHandler::startFromRequest(const Request& req,
                                   const ServerConfig& config,
                                   const std::string& scriptPath,
-                                  const std::string& interpreterPath,
-                                  int idleTimeoutSec,
-                                  int maxTimeoutSec)
+                                  const std::string& interpreterPath)
 {
+    const LocationConfig* loc = config.matchLocation(req.getUri());
+    int idleTimeoutSec = loc ? loc->cgi_idle_timeout : 30;
+    int maxTimeoutSec  = loc ? loc->cgi_max_timeout  : 0;
+
     EnvBuilder envBuilder;
     std::vector<std::string> envVars = envBuilder.buildFromRequest(req, config);
 

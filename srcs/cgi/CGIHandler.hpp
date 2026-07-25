@@ -64,9 +64,7 @@ public:
     bool startFromRequest(const Request& req,
                           const ServerConfig& config,
                           const std::string& scriptPath,
-                          const std::string& interpreterPath,
-                          int idleTimeoutSec = 30,
-                          int maxTimeoutSec = 0);
+                          const std::string& interpreterPath);
 
     // Called by the main loop when poll() reports stdinFd is writable.
     void onStdinReady();
