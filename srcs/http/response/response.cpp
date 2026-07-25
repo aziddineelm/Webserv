@@ -111,32 +111,6 @@ void Response::buildRedirect(int code, const std::string &location) {
 	setBody("");
 }
 
-// Build response from CGI raw output
-void Response::buildFromCgiOutput(const std::string &rawCgiOutput) {
-	CGIResponseParser parser;
-	std::map<std::string, std::string> cgiHeaders;
-	std::string cgiBody;
-	parser.parse(rawCgiOutput, cgiHeaders, cgiBody);
-
-	// Extract status code from CGI headers (default 200)
-	int statusCode = 200;
-	std::map<std::string, std::string>::iterator sit = cgiHeaders.find("Status");
-	if (sit != cgiHeaders.end()) {
-		statusCode = std::atoi(sit->second.c_str());
-		if (statusCode <= 0)
-			statusCode = 200;
-		cgiHeaders.erase(sit);
-	}
-	setStatus(statusCode);
-
-	// Copy CGI headers into the HTTP response
-	for (std::map<std::string, std::string>::iterator hi = cgiHeaders.begin(); hi != cgiHeaders.end(); ++hi) {
-		setHeader(hi->first, hi->second);
-	}
-
-	setBody(cgiBody);
-}
-
 // Build a headers-only response from pre-parsed CGI headers (for live streaming).
 // Person C's CGIHandler already parsed the raw stdout into a std::map.
 // This sets Transfer-Encoding: chunked and enters chunked mode (no Content-Length).

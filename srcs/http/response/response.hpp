@@ -26,7 +26,6 @@ public:
 	// Convenience builders
 	void	buildErrorPage(int code, const std::string &filePath = "");
 	void	buildRedirect(int code, const std::string &location);
-	void	buildFromCgiOutput(const std::string &rawCgiOutput);
 
 	// CGI Live Streaming — builds headers-only response from pre-parsed CGI headers
 	void	buildFromCgiHeaders(const std::map<std::string, std::string> &cgiHeaders);
