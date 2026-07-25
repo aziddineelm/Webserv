@@ -17,7 +17,6 @@ extern volatile sig_atomic_t g_running;
 #define POLL_TIMEOUT_MS		1000	// Wake up every second for timeout checks
 #define CLIENT_TIMEOUT_SEC	60		// Close clients idle for 60 seconds
 #define READ_BUFFER_SIZE	8192	// Stack buffer for recv() — one read per poll cycle
-#define CGI_TIMEOUT_SEC		60		// Close CGI processes idle for 60 seconds
 
 // --------------------------------------------------------------------------
 // Constructor / Destructor
@@ -247,7 +246,7 @@ void EventLoop::_dispatchRequest(int clientFd, Client &client) {
 
 void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serverConfig) {
 	
-	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter(), 30, 0);
+	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter());
 
 	if (!started) {
 		std::cerr << "[EventLoop] CGI spawn failed (fd " << clientFd << ")" << std::endl;
@@ -260,7 +259,7 @@ void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serv
 
 	// Register CGI pipes into epoll
 	client.state = STATE_CGI_RUNNING;
-	_removeEpollFd(clientFd); // Pause client socket monitoring
+	_setEpollEvents(clientFd, 0); // Keep in epoll for disconnect detection
 
 	int stdoutFd = client.cgi.getStdoutFd();
 	int stderrFd = client.cgi.getStderrFd();
@@ -313,6 +312,27 @@ void EventLoop::_handleWrite(int clientFd) {
 
 	// Check if the current buffer chunk has been fully sent
 	if (client.writeOffset >= client.writeBuffer.size()) {
+		// CGI streaming: buffer flushed, check for more data
+		if (client.state == STATE_CGI_STREAMING) {
+			client.writeBuffer.clear();
+			client.writeOffset = 0;
+			
+			if (client.cgi.hasPendingOutput()) {
+				client.writeBuffer = Response::formatChunk(client.cgi.popOutput());
+			}
+			
+			if (client.cgi.getState() == CGI_DONE && client.cgi.outputFullyConsumed()) {
+				client.response.markDone();
+				client.state = STATE_WRITING;
+				client.writeBuffer.append(client.response.getNextChunk()); // terminal chunk
+			}
+			
+			if (client.writeBuffer.empty()) {
+				_setEpollEvents(clientFd, 0); // Pause writes until CGI produces more
+			}
+			return;
+		}
+
 		// If there is more data to send (file streaming), load the next chunk
 		if (!client.response.isDone()) {
 			client.writeBuffer = client.response.getNextChunk();
@@ -343,7 +363,7 @@ void EventLoop::_handleWrite(int clientFd) {
 
 void EventLoop::_handleDisconnect(int clientFd) {
 	std::map<int, Client>::iterator it = _clients.find(clientFd);
-	if (it != _clients.end() && it->second.state == STATE_CGI_RUNNING) {
+	if (it != _clients.end() && (it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING)) {
 		int stdoutFd = it->second.cgi.getStdoutFd();
 		int stderrFd = it->second.cgi.getStderrFd();
 		int stdinFd  = it->second.cgi.getStdinFd();
@@ -399,25 +419,53 @@ void EventLoop::_handleCgiReady(int pipeFd, uint32_t events) {
 		}
 	}
 
-	// Check if CGI is finished (all pipes closed, child reaped)
-	CgiState cgiState = client.cgi.getState();
-	if (cgiState == CGI_DONE || cgiState == CGI_ERROR) {
-		// Build the HTTP response from CGI output
+	// ── Streaming: headers ready → send HTTP headers to client ──
+	if (client.cgi.headersReady() && client.state == STATE_CGI_RUNNING) {
 		client.response = Response();
+		client.response.buildFromCgiHeaders(client.cgi.getCgiHeaders());
+		client.response.setHeader("Connection",
+			client.request.isKeepAlive() ? "keep-alive" : "close");
 
-		if (cgiState == CGI_DONE && client.cgi.succeeded()) {
-			client.response.buildFromCgiOutput(client.cgi.getOutput());
-			std::cout << "[EventLoop] CGI done (fd " << clientFd << "): status "
-					  << client.response.getStatusCode() << std::endl;
-		} else {
-			std::cerr << "[EventLoop] CGI error (fd " << clientFd << "): "
-					  << client.cgi.getError() << std::endl;
-			client.response.buildErrorPage(500);
-		}
+		client.writeBuffer = client.response.getHeaders();
+		client.writeOffset = 0;
+		client.state = STATE_CGI_STREAMING;
+		_setEpollEvents(clientFd, EPOLLOUT);
 
-		// Re-register the client socket for writing
+		std::cout << "[EventLoop] CGI streaming (fd " << clientFd << "): status "
+				  << client.response.getStatusCode() << std::endl;
+	}
+
+	// ── Streaming: pipe body chunks to client ──
+	if (client.cgi.hasPendingOutput() && client.state == STATE_CGI_STREAMING) {
+		client.writeBuffer.append(Response::formatChunk(client.cgi.popOutput()));
+		_setEpollEvents(clientFd, EPOLLOUT);
+	}
+
+	// ── Streaming: CGI finished + all output consumed → finalize ──
+	if (client.cgi.getState() == CGI_DONE && client.cgi.outputFullyConsumed()
+		&& client.state == STATE_CGI_STREAMING) {
+		client.response.markDone();
+		client.state = STATE_WRITING;
+		_setEpollEvents(clientFd, EPOLLOUT); // Ensure EventLoop writes the terminal chunk
+	}
+
+	// ── Error during streaming → close stream gracefully ──
+	if (client.cgi.getState() == CGI_ERROR && client.state == STATE_CGI_STREAMING) {
+		std::cerr << "[EventLoop] CGI error mid-stream (fd " << clientFd << "): "
+				  << client.cgi.getError() << std::endl;
+		client.response.markDone();
+		client.state = STATE_WRITING;
+		_setEpollEvents(clientFd, EPOLLOUT);
+	}
+
+	// ── Error before headers sent → send clean 500 error page ──
+	if (client.cgi.getState() == CGI_ERROR && client.state == STATE_CGI_RUNNING) {
+		std::cerr << "[EventLoop] CGI error (fd " << clientFd << "): "
+				  << client.cgi.getError() << std::endl;
+		client.response = Response();
+		client.response.buildErrorPage(500);
 		_startWriting(client);
-		_addEpollFd(clientFd, EPOLLOUT);
+		_setEpollEvents(clientFd, EPOLLOUT);
 	}
 }
 
@@ -464,8 +512,9 @@ void EventLoop::_checkTimeouts() {
 	std::map<int, Client>::iterator it = _clients.begin();
 	
 	while (it != _clients.end()) {
-		// 1. Check if a running CGI process timed out (504 Gateway Timeout)
-		if (it->second.state == STATE_CGI_RUNNING && it->second.cgi.checkTimeout()) {
+		// 1. Check if a CGI process timed out (idle or absolute config timeout)
+		if ((it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING)
+			&& it->second.cgi.checkTimeout()) {
 			int stdoutFd = it->second.cgi.getStdoutFd();
 			int stderrFd = it->second.cgi.getStderrFd();
 			int stdinFd = it->second.cgi.getStdinFd();
@@ -474,9 +523,18 @@ void EventLoop::_checkTimeouts() {
 			if (stdinFd >= 0) { _removeEpollFd(stdinFd); _cgiToClient.erase(stdinFd); }
 
 			std::cerr << "[EventLoop] CGI timeout (fd " << it->first << ")" << std::endl;
-			it->second.response.buildErrorPage(504);
-			_startWriting(it->second);
-			_addEpollFd(it->first, EPOLLOUT);
+			
+			if (it->second.state == STATE_CGI_RUNNING) {
+				// Timeout before headers sent -> send clean 504 HTML page
+				it->second.response.buildErrorPage(504);
+				_startWriting(it->second);
+			} else {
+				// Timeout mid-stream -> terminate chunked stream (can't send 504 HTML now)
+				it->second.response.markDone();
+				it->second.state = STATE_WRITING;
+				it->second.writeBuffer.append(it->second.response.getNextChunk()); // "0\r\n\r\n"
+			}
+			_setEpollEvents(it->first, EPOLLOUT);
 			++it;
 			continue;
 		}

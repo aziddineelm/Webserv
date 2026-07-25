@@ -14,6 +14,7 @@
 enum ClientState {
 	STATE_READING,		// Waiting for complete HTTP request
 	STATE_CGI_RUNNING,	// CGI process is running (pipes registered in epoll)
+	STATE_CGI_STREAMING,	// CGI headers sent, body streaming in progress
 	STATE_WRITING,		// Sending HTTP response
 	STATE_DONE			// Ready to close
 };
