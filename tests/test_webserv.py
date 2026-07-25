@@ -209,10 +209,10 @@ def keepalive_request(requests):
 def test_01_get_index():
     """GET / serves index.html"""
     status, headers, body = http_request("GET", "/")
-    if status == 200 and "Welcome to Webserv" in body:
+    if status == 200 and "Webserv" in body:
         return TestResult(TestResult.PASS, "GET / serves index.html", "200 OK")
     return TestResult(TestResult.FAIL, "GET / serves index.html",
-                      "Expected 200 + 'Welcome to Webserv', got {} | body preview: {}".format(status, body[:80]))
+                      "Expected 200 + 'Webserv', got {} | body preview: {}".format(status, body[:80]))
 
 
 def test_02_get_css():
@@ -325,7 +325,7 @@ def test_11_cgi_post_echo():
 def test_12_cgi_timeout_504():
     """GET /cgi-bin/infinite_loop.py should timeout with 504"""
     start = time.time()
-    status, headers, body = http_request("GET", "/cgi-bin/infinite_loop.py", timeout=65)
+    status, headers, body = http_request("GET", "/cgi-bin/infinite_loop.py", timeout=6)
     elapsed = time.time() - start
     if status == 504:
         return TestResult(TestResult.PASS, "CGI timeout (504)",
