@@ -196,17 +196,22 @@
         if (!url) return toast('Please enter an upload URL', 'error');
         if (!fileInput.files.length) return toast('Please select a file', 'error');
 
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
+        const file = fileInput.files[0];
+        let targetUrl = url;
+        if (!targetUrl.endsWith('/')) targetUrl += '/';
+        targetUrl += encodeURIComponent(file.name);
 
         const btn = fileForm.querySelector('.btn');
         setLoading(btn, true);
 
         try {
-          const res = await fetch(url, { method: 'POST', body: formData });
-          const ct = (res.headers.get('content-type') || '').toLowerCase();
+          const res = await fetch(targetUrl, { 
+            method: 'POST', 
+            body: file,
+            headers: { 'Content-Type': file.type || 'application/octet-stream' }
+          });
           const text = await res.text();
-          showResponse('post-response', res.status, res.headers, text, { type: ct.includes('html') ? 'html' : undefined });
+          showResponse('post-response', res.status, res.headers, text);
           toast(`Upload ${res.status} — ${res.statusText}`, res.ok ? 'success' : 'error');
 
         } catch (err) {

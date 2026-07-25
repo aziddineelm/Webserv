@@ -4,7 +4,19 @@
 void HttpUtils::buildErrorPage(int code, const LocationConfig &loc, Response &res) {
 	std::map<int, std::string>::const_iterator it = loc.error_pages.find(code);
 	if (it != loc.error_pages.end() && !it->second.empty()) {
-		res.buildErrorPage(code, it->second);
+		std::string errPath = loc.root;
+		std::string remainder = it->second;
+
+		if (!errPath.empty() && errPath[errPath.size() - 1] == '/'
+			&& !remainder.empty() && remainder[0] == '/') {
+			errPath = errPath.substr(0, errPath.size() - 1);
+		} else if (!errPath.empty() && errPath[errPath.size() - 1] != '/'
+				   && !remainder.empty() && remainder[0] != '/') {
+			errPath += "/";
+		}
+		errPath += remainder;
+
+		res.buildErrorPage(code, errPath);
 	} else {
 		res.buildErrorPage(code);
 	}

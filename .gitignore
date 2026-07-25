@@ -1,5 +1,4 @@
 webserv
 *.o
-personAtmp/*
 *.out
 tmp_B/*
