@@ -11,7 +11,7 @@
 Response::Response()
 	: _statusCode(200), _reasonPhrase("OK"),
 	  _fileOffset(0), _fileSize(0),
-	  _headersSent(false), _done(false) {}
+	  _headersSent(false), _done(false), _isChunked(false), _cgiEOF(false) {}
 
 Response::Response(const Response &other) { *this = other; }
 
@@ -26,6 +26,8 @@ Response &Response::operator=(const Response &other) {
 		_fileSize = other._fileSize;
 		_headersSent = other._headersSent;
 		_done = other._done;
+		_isChunked = other._isChunked;
+		_cgiEOF = other._cgiEOF;
 		_cgiScriptPath = other._cgiScriptPath;
 		_cgiInterpreterPath = other._cgiInterpreterPath;
 	}
@@ -135,6 +137,35 @@ void Response::buildFromCgiOutput(const std::string &rawCgiOutput) {
 	setBody(cgiBody);
 }
 
+// Build a headers-only response from pre-parsed CGI headers (for live streaming).
+// Person C's CGIHandler already parsed the raw stdout into a std::map.
+// This sets Transfer-Encoding: chunked and enters chunked mode (no Content-Length).
+void Response::buildFromCgiHeaders(const std::map<std::string, std::string> &cgiHeaders) {
+	// Extract status code from CGI headers (default 200)
+	int statusCode = 200;
+	std::map<std::string, std::string>::const_iterator sit = cgiHeaders.find("Status");
+	if (sit != cgiHeaders.end()) {
+		statusCode = std::atoi(sit->second.c_str());
+		if (statusCode <= 0)
+			statusCode = 200;
+	}
+	setStatus(statusCode);
+
+	// Copy CGI headers into the HTTP response (skip "Status" — it's not an HTTP header)
+	for (std::map<std::string, std::string>::const_iterator hi = cgiHeaders.begin(); hi != cgiHeaders.end(); ++hi) {
+		if (hi->first != "Status")
+			setHeader(hi->first, hi->second);
+	}
+
+	// Chunked mode: no Content-Length, stream body live
+	_headers.erase("Content-Length");
+	setHeader("Transfer-Encoding", "chunked");
+	_isChunked = true;
+}
+
+// Called by EventLoop when CGI stdout hits EOF — next getNextChunk() returns terminal chunk
+void Response::markDone() { _cgiEOF = true; }
+
 // ============================================================
 // Streaming API — Person A calls getNextChunk() in a loop
 // ============================================================
@@ -167,10 +198,21 @@ std::string Response::getNextChunk() {
 	// First call: return headers only
 	if (!_headersSent) {
 		_headersSent = true;
-		// If string mode with no body, mark done immediately
-		if (_filePath.empty() && _body.empty())
+		// If string mode with no body and not chunked, mark done immediately
+		if (_filePath.empty() && _body.empty() && !_isChunked)
 			_done = true;
 		return getHeaders();
+	}
+
+	// Chunked mode (CGI live streaming): body is fed by EventLoop directly.
+	// When EventLoop calls markDone() after CGI EOF, we return the terminal chunk.
+	// Otherwise we return empty — EventLoop appends body chunks to writeBuffer itself.
+	if (_isChunked) {
+		if (_cgiEOF) {
+			_done = true;
+			return "0\r\n\r\n";
+		}
+		return "";
 	}
 
 	// String mode: body is sent in a single second call
@@ -200,6 +242,17 @@ std::string Response::getNextChunk() {
 
 bool Response::isDone() const { return _done; }
 
+// Format raw data as an HTTP chunk: <hex_size>\r\n<data>\r\n
+// Person A calls this to wrap CGI body bytes before appending to writeBuffer.
+std::string Response::formatChunk(const std::string &data) {
+	if (data.empty())
+		return "";
+	std::ostringstream oss;
+	oss << std::hex << data.size() << "\r\n";
+	oss << data << "\r\n";
+	return oss.str();
+}
+
 
 
 // ============================================================
@@ -228,7 +281,11 @@ std::string Response::getReasonPhrase(int code) {
 		// 5xx Server Error
 		case 500: return "Internal Server Error";
 		case 501: return "Not Implemented";
+		case 502: return "Bad Gateway";
 		case 503: return "Service Unavailable";
+		case 504: return "Gateway Timeout";
+		// 4xx (additional)
+		case 408: return "Request Timeout";
 		default:  return "Unknown";
 	}
 }

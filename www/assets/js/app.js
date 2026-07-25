@@ -211,7 +211,7 @@
             headers: { 'Content-Type': file.type || 'application/octet-stream' }
           });
           const text = await res.text();
-          showResponse('post-response', res.status, res.headers, text, { type: ct.includes('html') ? 'html' : undefined });
+          showResponse('post-response', res.status, res.headers, text);
           toast(`Upload ${res.status} — ${res.statusText}`, res.ok ? 'success' : 'error');
 
         } catch (err) {
