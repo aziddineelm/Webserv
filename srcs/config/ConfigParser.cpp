@@ -56,7 +56,9 @@ namespace {
     bool isLocationDirectiveWord(const std::string& value) {
         return value == "allowed_methods" || value == "root" || value == "alias" ||
                value == "autoindex" || value == "index" || value == "return" ||
-               value == "cgi_extension" || value == "cgi_path" || value == "upload_store" ||
+               value == "cgi_extension" || value == "cgi_path" ||
+               value == "cgi_idle_timeout" || value == "cgi_max_timeout" ||
+               value == "upload_store" ||
                value == "client_max_body_size" || value == "location" || value == "server";
     }
 }
@@ -266,6 +268,14 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
                     newLocation.cgi_map[newLocation.cgi_extensions[i]] = newLocation.cgi_path;
                 }
             }
+        } else if (directive == "cgi_idle_timeout") {
+            if (args.empty()) throw ConfigException("cgi_idle_timeout directive missing arguments");
+            if (!isNumber(args[0])) throw ConfigException("Invalid cgi_idle_timeout: " + args[0]);
+            newLocation.cgi_idle_timeout = std::atoi(args[0].c_str());
+        } else if (directive == "cgi_max_timeout") {
+            if (args.empty()) throw ConfigException("cgi_max_timeout directive missing arguments");
+            if (!isNumber(args[0])) throw ConfigException("Invalid cgi_max_timeout: " + args[0]);
+            newLocation.cgi_max_timeout = std::atoi(args[0].c_str());
         } else if (directive == "upload_store") {
             if (args.empty()) throw ConfigException("upload_store directive missing arguments");
             newLocation.upload_store = args[0];

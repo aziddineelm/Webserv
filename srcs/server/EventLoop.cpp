@@ -247,7 +247,7 @@ void EventLoop::_dispatchRequest(int clientFd, Client &client) {
 
 void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serverConfig) {
 	
-	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter(), CGI_TIMEOUT_SEC);
+	bool started = client.cgi.startFromRequest(client.request, serverConfig, client.response.getCgiScript(), client.response.getCgiInterpreter(), 30, 0);
 
 	if (!started) {
 		std::cerr << "[EventLoop] CGI spawn failed (fd " << clientFd << ")" << std::endl;
