@@ -1,7 +1,8 @@
 #include "ServerConfig.hpp"
 #include <iostream>
 
-LocationConfig::LocationConfig() : autoindex(false), redirect_code(0), client_max_body_size(1048576) {}
+LocationConfig::LocationConfig() : autoindex(false), redirect_code(0), client_max_body_size(1048576),
+    cgi_idle_timeout(30), cgi_max_timeout(0) {}
 
 ServerConfig::ServerConfig() : host("127.0.0.1"), client_max_body_size(1048576) {
     listen_ports.push_back(8080);

@@ -12,6 +12,7 @@
 #include <cstring>
 #include <poll.h>
 #include <errno.h>
+#include <cstdlib>
 
 static bool runHelloTest() {
     const std::string scriptPath = "./www/cgi-bin/hello.py";

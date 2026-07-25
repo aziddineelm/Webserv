@@ -1,5 +1,6 @@
 #include "CGIHandler.hpp"
 #include "ProcessSpawner.hpp"
+#include "CGIResponseParser.hpp"
 
 #include <unistd.h>
 #include <poll.h>
@@ -10,6 +11,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <stdlib.h>
+#include <sstream>
 #include "EnvBuilder.hpp"
 #include "../http/request/request.hpp"
 #include "../config/ServerConfig.hpp"
@@ -20,8 +22,11 @@ CGIHandler::CGIHandler()
     : _state(CGI_IDLE), _pid(-1),
       _stdinFd(-1), _stdoutFd(-1), _stderrFd(-1),
       _inputPos(0), _bodyFileFd(-1),
-      _startTime(0), _timeoutSeconds(5),
-      _exitStatus(0), _exited(false) {}
+      _startTime(0),
+      _exitStatus(0), _exited(false),
+      _headersParsed(false), _streamingMode(false),
+      _outputQueueOffset(0),
+      _lastActivityTime(0), _idleTimeoutSeconds(30), _maxTimeoutSeconds(0) {}
 
 CGIHandler::~CGIHandler() {
     cleanup();
@@ -36,13 +41,22 @@ void CGIHandler::closeFd(int& fd) {
     }
 }
 
+// --- Helper: int to string (no C++11) ---
+
+std::string CGIHandler::_intToStr(int n) {
+    std::ostringstream oss;
+    oss << n;
+    return oss.str();
+}
+
 // --- Non-blocking API ---
 
 bool CGIHandler::start(const std::string& scriptPath,
                        const std::string& interpreterPath,
                        const std::vector<std::string>& env,
                        const std::string& input,
-                       int timeoutSeconds) {
+                       int idleTimeoutSec,
+                       int maxTimeoutSec) {
     cleanup();
 
     _input = input;
@@ -52,7 +66,14 @@ bool CGIHandler::start(const std::string& scriptPath,
     _error.clear();
     _exitStatus = 0;
     _exited = false;
-    _timeoutSeconds = timeoutSeconds;
+    _idleTimeoutSeconds = idleTimeoutSec;
+    _maxTimeoutSeconds = maxTimeoutSec;
+    _headersParsed = false;
+    _streamingMode = false;  // Default: populate _output for backward compat
+    _rawBuffer.clear();
+    _cgiHeaders.clear();
+    _outputQueue.clear();
+    _outputQueueOffset = 0;
 
     std::vector<std::string> argv;
     if (!interpreterPath.empty()) {
@@ -74,6 +95,7 @@ bool CGIHandler::start(const std::string& scriptPath,
     fcntl(_stderrFd, F_SETFL, O_NONBLOCK);
 
     _startTime = time(NULL);
+    _lastActivityTime = _startTime;
 
     // If there is no input to write, close stdin immediately.
     if (_input.empty()) {
@@ -90,7 +112,8 @@ bool CGIHandler::startFromFile(const std::string& scriptPath,
                                const std::string& interpreterPath,
                                const std::vector<std::string>& env,
                                const std::string& bodyFilePath,
-                               int timeoutSeconds) {
+                               int idleTimeoutSec,
+                               int maxTimeoutSec) {
     cleanup();
 
     _input.clear();
@@ -100,7 +123,14 @@ bool CGIHandler::startFromFile(const std::string& scriptPath,
     _error.clear();
     _exitStatus = 0;
     _exited = false;
-    _timeoutSeconds = timeoutSeconds;
+    _idleTimeoutSeconds = idleTimeoutSec;
+    _maxTimeoutSeconds = maxTimeoutSec;
+    _headersParsed = false;
+    _streamingMode = false;  // Default: populate _output for backward compat
+    _rawBuffer.clear();
+    _cgiHeaders.clear();
+    _outputQueue.clear();
+    _outputQueueOffset = 0;
 
     // Open the body file for streaming if a path was provided.
     if (!bodyFilePath.empty()) {
@@ -139,6 +169,7 @@ bool CGIHandler::startFromFile(const std::string& scriptPath,
     fcntl(_stderrFd, F_SETFL, O_NONBLOCK);
 
     _startTime = time(NULL);
+    _lastActivityTime = _startTime;
 
     // If there is no body file, close stdin immediately.
     if (_bodyFileFd < 0) {
@@ -155,7 +186,8 @@ bool CGIHandler::startFromRequest(const Request& req,
                                   const ServerConfig& config,
                                   const std::string& scriptPath,
                                   const std::string& interpreterPath,
-                                  int timeoutSeconds)
+                                  int idleTimeoutSec,
+                                  int maxTimeoutSec)
 {
     EnvBuilder envBuilder;
     std::vector<std::string> envVars = envBuilder.buildFromRequest(req, config);
@@ -181,9 +213,9 @@ bool CGIHandler::startFromRequest(const Request& req,
 
     std::string bodyFilePath = req.getBodyFilePath();
     if (!bodyFilePath.empty()) {
-        return startFromFile(resolvedScript, interpreterPath, envVars, bodyFilePath, timeoutSeconds);
+        return startFromFile(resolvedScript, interpreterPath, envVars, bodyFilePath, idleTimeoutSec, maxTimeoutSec);
     } else {
-        return start(resolvedScript, interpreterPath, envVars, req.getBody(), timeoutSeconds);
+        return start(resolvedScript, interpreterPath, envVars, req.getBody(), idleTimeoutSec, maxTimeoutSec);
     }
 }
 
@@ -229,9 +261,39 @@ void CGIHandler::onStdoutReady() {
     char buf[4096];
     ssize_t n = read(_stdoutFd, buf, sizeof(buf));
     if (n > 0) {
-        _output.append(buf, static_cast<size_t>(n));
+        // Update inactivity timer on every successful read
+        _lastActivityTime = time(NULL);
+
+        if (!_headersParsed) {
+            // Phase 1: Accumulating data until we find header/body separator
+            _rawBuffer.append(buf, static_cast<size_t>(n));
+
+            // Safety: reject CGI output with absurdly large headers (64KB limit)
+            if (_rawBuffer.size() > 65536) {
+                _error = "CGIHandler: CGI headers exceeded 64KB limit";
+                _state = CGI_ERROR;
+                closeFd(_stdoutFd);
+                return;
+            }
+
+            _tryParseHeaders();
+        } else {
+            // Phase 2: Headers parsed — body bytes go straight to output queue
+            _outputQueue.append(buf, static_cast<size_t>(n));
+        }
+
+        // Backward compat: blocking run() still uses _output
+        if (!_streamingMode) {
+            _output.append(buf, static_cast<size_t>(n));
+        }
     } else if (n == 0) {
         // EOF — CGI closed stdout.
+        if (!_headersParsed) {
+            // Script closed stdout before producing headers — treat entire buffer as body
+            _headersParsed = true;
+            _outputQueue.append(_rawBuffer);
+            _rawBuffer.clear();
+        }
         closeFd(_stdoutFd);
         checkDone();
     } else if (errno != EAGAIN && errno != EINTR) {
@@ -256,11 +318,64 @@ void CGIHandler::onStderrReady() {
     }
 }
 
+// --- Private: Incremental header parsing ---
+
+void CGIHandler::_tryParseHeaders() {
+    // Check if separator exists in buffer
+    size_t sepPos = _rawBuffer.find("\r\n\r\n");
+    if (sepPos == std::string::npos) {
+        sepPos = _rawBuffer.find("\n\n");
+    }
+    if (sepPos == std::string::npos)
+        return; // Not enough data yet
+
+    // Reuse the existing CGIResponseParser for correct header parsing
+    // (handles case-insensitive Status, trimStatusValue, etc.)
+    CGIResponseParser parser;
+    std::string parsedBody;
+    parser.parse(_rawBuffer, _cgiHeaders, parsedBody);
+
+    // Push any body bytes that arrived with the headers
+    _outputQueue.append(parsedBody);
+    _rawBuffer.clear();
+    _headersParsed = true;
+    _state = CGI_HEADERS_READY;
+}
+
+// --- Private: Output queue compaction ---
+
+void CGIHandler::_compactOutputQueue() {
+    if (_outputQueueOffset > 0 && _outputQueueOffset > _outputQueue.size() / 2) {
+        _outputQueue.erase(0, _outputQueueOffset);
+        _outputQueueOffset = 0;
+    }
+}
+
+// --- Dual Timeout ---
+
 bool CGIHandler::checkTimeout() {
     if (_state == CGI_DONE || _state == CGI_ERROR || _state == CGI_IDLE) return false;
-    if (_timeoutSeconds <= 0) return false;
 
-    if ((time(NULL) - _startTime) >= _timeoutSeconds) {
+    time_t now = time(NULL);
+
+    // Check 1: Inactivity timeout (nginx-style proxy_read_timeout)
+    // Fires when no data has been received for _idleTimeoutSeconds
+    bool timedOut = false;
+    if (_idleTimeoutSeconds > 0 && (now - _lastActivityTime) >= _idleTimeoutSeconds) {
+        _error = "CGIHandler: process timed out (no activity for "
+                 + _intToStr(_idleTimeoutSeconds) + "s)";
+        timedOut = true;
+    }
+
+    // Check 2: Absolute timeout (php-fpm-style request_terminate_timeout)
+    // Fires when total wall-clock time exceeds _maxTimeoutSeconds
+    if (!timedOut && _maxTimeoutSeconds > 0 && (now - _startTime) >= _maxTimeoutSeconds) {
+        _error = "CGIHandler: process exceeded absolute timeout ("
+                 + _intToStr(_maxTimeoutSeconds) + "s)";
+        timedOut = true;
+    }
+
+    if (timedOut) {
         if (_pid > 0 && !_exited) {
             kill(_pid, SIGKILL);
             waitpid(_pid, &_exitStatus, 0);
@@ -269,7 +384,6 @@ bool CGIHandler::checkTimeout() {
         closeFd(_stdinFd);
         closeFd(_stdoutFd);
         closeFd(_stderrFd);
-        _error = "CGIHandler: process timed out";
         _state = CGI_ERROR;
         return true;
     }
@@ -326,6 +440,39 @@ bool CGIHandler::succeeded() const {
            && WIFEXITED(_exitStatus) && WEXITSTATUS(_exitStatus) == 0;
 }
 
+// --- Streaming API ---
+
+bool CGIHandler::headersReady() const {
+    return _headersParsed;
+}
+
+const std::map<std::string, std::string>& CGIHandler::getCgiHeaders() const {
+    return _cgiHeaders;
+}
+
+bool CGIHandler::hasPendingOutput() const {
+    return _outputQueueOffset < _outputQueue.size();
+}
+
+std::string CGIHandler::popOutput(size_t maxBytes) {
+    size_t available = _outputQueue.size() - _outputQueueOffset;
+    if (available == 0)
+        return "";
+
+    size_t chunkSize = (maxBytes < available) ? maxBytes : available;
+    std::string chunk = _outputQueue.substr(_outputQueueOffset, chunkSize);
+    _outputQueueOffset += chunkSize;
+
+    // Periodically reclaim memory
+    _compactOutputQueue();
+
+    return chunk;
+}
+
+bool CGIHandler::outputFullyConsumed() const {
+    return _stdoutFd < 0 && _outputQueueOffset >= _outputQueue.size();
+}
+
 // --- Blocking API (backward-compatible wrapper for tests) ---
 
 bool CGIHandler::run(const std::string& scriptPath,
@@ -334,12 +481,14 @@ bool CGIHandler::run(const std::string& scriptPath,
                      const std::string& input,
                      std::string& output,
                      std::string& error,
-                     int timeoutSeconds) {
-    if (!start(scriptPath, interpreterPath, env, input, timeoutSeconds)) {
+                     int idleTimeoutSec,
+                     int maxTimeoutSec) {
+    if (!start(scriptPath, interpreterPath, env, input, idleTimeoutSec, maxTimeoutSec)) {
         output = _output;
         error = _error;
         return false;
     }
+    _streamingMode = false; // Blocking mode — accumulate in _output
 
     while (_state != CGI_DONE && _state != CGI_ERROR) {
         if (checkTimeout()) break;
