@@ -28,6 +28,10 @@ public:
 	void	buildRedirect(int code, const std::string &location);
 	void	buildFromCgiOutput(const std::string &rawCgiOutput);
 
+	// CGI Live Streaming — builds headers-only response from pre-parsed CGI headers
+	void	buildFromCgiHeaders(const std::map<std::string, std::string> &cgiHeaders);
+	void	markDone();
+
 	// CGI metadata — Router sets these when the request targets a CGI script
 	void		setCgiScript(const std::string &script, const std::string &interpreter);
 	std::string	getCgiScript() const;
@@ -39,12 +43,10 @@ public:
 	std::string	getNextChunk();
 	bool		isDone() const;
 
-
-
-
 	// Utility (static)
 	static std::string	getMimeType(const std::string &extension);
 	static std::string	getReasonPhrase(int code);
+	static std::string	formatChunk(const std::string &data);
 
 private:
 	int				_statusCode;
@@ -58,6 +60,8 @@ private:
 	size_t			_fileSize;
 	bool			_headersSent;
 	bool			_done;
+	bool			_isChunked;
+	bool			_cgiEOF;
 
 	// CGI metadata (set by Router, read by EventLoop)
 	std::string		_cgiScriptPath;
