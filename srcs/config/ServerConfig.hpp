@@ -38,6 +38,10 @@ struct LocationConfig {
     size_t client_max_body_size;
     // Mapping of HTTP status codes to custom error page paths (inherited from server).
     std::map<int, std::string> error_pages;
+    // CGI inactivity timeout in seconds (nginx-style proxy_read_timeout, default: 30, 0 = disabled).
+    int cgi_idle_timeout;
+    // CGI absolute timeout in seconds (php-fpm-style request_terminate_timeout, default: 0 = disabled).
+    int cgi_max_timeout;
 
     // Default constructor initializes sensible defaults.
     LocationConfig();
