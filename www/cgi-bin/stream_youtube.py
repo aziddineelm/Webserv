@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
 import sys
-import subprocess
-import os
+import urllib.request
 
 print("Status: 200 OK")
 print("Content-Type: video/mp4")
 print("")
 sys.stdout.flush()
 
-youtube_url = "https://www.youtube.com/watch?v=1mBc8VjDa1s"
-yt_dlp_path = os.path.expanduser("~/.local/bin/yt-dlp")
+import os
 
-# Stream best audio+video combined format (format 18 is 360p mp4)
-command = [
-    yt_dlp_path,
-    "-f", "18",
-    "-o", "-",
-    "--quiet",
-    youtube_url
-]
+# Stream a local video file to avoid any internet/bot blocking issues
+video_path = "/home/anbaya/Desktop/Webserv/www/media/test_video.mp4"
 
 try:
-    # Pass fd 1 directly so yt-dlp streams raw binary video data straight to Webserv
-    subprocess.run(command, stdout=1)
+    with open(video_path, "rb") as f:
+        while True:
+            # Read in 8KB chunks
+            chunk = f.read(8192)
+            if not chunk:
+                break
+
+            # Use sys.stdout.buffer to write raw binary data safely
+            sys.stdout.buffer.write(chunk)
+            sys.stdout.buffer.flush()
 except Exception as e:
+    # Log the error to stdout so we can see why it failed in curl
+    sys.stdout.buffer.write(b"Stream Error: " + str(e).encode())
+    sys.stdout.buffer.flush()
     pass
