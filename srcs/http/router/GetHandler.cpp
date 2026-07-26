@@ -6,6 +6,10 @@
 #include <dirent.h>
 #include <unistd.h>
 
+// ============================================================
+// Core GET Handler
+// ============================================================
+
 void GetHandler::handle(const Request &req, const LocationConfig &loc, const std::string &filePath, Response &res) {
 	if (HttpUtils::isDirectory(filePath)) {
 		_serveDirectory(filePath, req.getPath(), loc, res);
@@ -16,13 +20,19 @@ void GetHandler::handle(const Request &req, const LocationConfig &loc, const std
 	}
 }
 
+// ============================================================
+// File Serving
+// ============================================================
+
 void GetHandler::_serveFile(const std::string &filePath, Response &res) {
 	struct stat st;
+	// Use stat to ensure it is a regular file before attempting to open
 	if (stat(filePath.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) {
 		res.buildErrorPage(404);
 		return;
 	}
 
+	// Verify read permissions before attempting to serve
 	if (access(filePath.c_str(), R_OK) != 0) {
 		res.buildErrorPage(403);
 		return;
@@ -32,6 +42,10 @@ void GetHandler::_serveFile(const std::string &filePath, Response &res) {
 	res.setHeader("Content-Type", Response::getMimeType(HttpUtils::getExtension(filePath)));
 	res.setFilePath(filePath, static_cast<size_t>(st.st_size));
 }
+
+// ============================================================
+// Directory Serving
+// ============================================================
 
 void GetHandler::_serveDirectory(const std::string &dirPath, const std::string &uri, const LocationConfig &loc, Response &res) {
 	if (uri.empty() || uri[uri.size() - 1] != '/') {
@@ -58,7 +72,12 @@ void GetHandler::_serveDirectory(const std::string &dirPath, const std::string &
 	}
 }
 
+// ============================================================
+// Autoindex (Directory Listing)
+// ============================================================
+
 void GetHandler::_generateDirListing(const std::string &dirPath, const std::string &uri, Response &res) {
+	// opendir ensures we can actually read the directory contents
 	DIR *dir = opendir(dirPath.c_str());
 	if (!dir) {
 		res.buildErrorPage(500);

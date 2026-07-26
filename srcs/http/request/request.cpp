@@ -153,14 +153,13 @@ std::string Request::_trim(const std::string &str) {
 	return str.substr(start, end - start + 1);
 }
 
-// DRY: Parse a numeric string (base 10 or 16) with full validation.
-// Returns false if the string is empty, contains non-numeric chars, or is
-// negative.
+// Parse a numeric string (base 10 or 16) with full validation.
 bool Request::_parseNumber(const std::string &str, long &result, int base) {
 	std::string trimmed = _trim(str);
 	if (trimmed.empty())
 		return false;
 	char *endPtr = 0;
+	// ── Clarification: Use strtol with endPtr to strictly validate the entire string is numeric
 	result = std::strtol(trimmed.c_str(), &endPtr, base);
 	if (endPtr == trimmed.c_str() || *endPtr != '\0' || result < 0)
 		return false;
@@ -192,7 +191,6 @@ void Request::_cleanupTempFile() {
 // ============================================================
 
 // Skip leading CRLFs before the request line (RFC 2616 §4.1).
-// Returns true if data was consumed (caller should retry).
 bool Request::_skipLeadingCRLF() {
 	if (_buffer.size() >= 2 && _buffer[0] == '\r' && _buffer[1] == '\n') {
 		_buffer.erase(0, 2);
@@ -202,8 +200,6 @@ bool Request::_skipLeadingCRLF() {
 }
 
 // Extract the first line from the buffer (up to \r\n).
-// Returns false if no complete line is available yet.
-// On success, erases the line + \r\n from the buffer.
 bool Request::_extractLine(std::string &line) {
 	size_t pos = _buffer.find("\r\n");
 	if (pos == std::string::npos)
@@ -214,7 +210,6 @@ bool Request::_extractLine(std::string &line) {
 }
 
 // Validate and split "METHOD URI VERSION" into the 3 fields.
-// Returns false on any validation failure (sets error).
 bool Request::_splitRequestLine(const std::string &line) {
 	std::istringstream iss(line);
 	std::string method, uri, version, extra;
@@ -252,8 +247,6 @@ void Request::_splitUri() {
 }
 
 // Extract the full header block from the buffer.
-// Returns false if headers are not yet complete.
-// Handles the edge case of no headers (buffer starts with \r\n).
 bool Request::_extractHeaderBlock(std::string &headerBlock) {
 	size_t pos = _buffer.find("\r\n\r\n");
 	if (pos != std::string::npos) {
@@ -271,7 +264,6 @@ bool Request::_extractHeaderBlock(std::string &headerBlock) {
 }
 
 // Parse a single "Key: Value" line into the _headers map.
-// Returns false on malformed header (sets error).
 bool Request::_parseHeaderLine(const std::string &line) {
 	size_t colonPos = line.find(':');
 	if (colonPos == std::string::npos) {
@@ -293,7 +285,6 @@ bool Request::_parseHeaderLine(const std::string &line) {
 }
 
 // Validate headers after parsing (Host requirement, etc).
-// Sets error on failure.
 void Request::_validateHeaders() {
 	// HTTP/1.1 requires Host header
 	if (_version == "HTTP/1.1") {
@@ -363,7 +354,7 @@ void Request::_decideBodyState() {
 // Private: State Machine Steps
 // ============================================================
 
-// Step 1: Parse request line — "METHOD URI VERSION\r\n"
+// ── State: Parse Request Line ──
 void Request::_parseRequestLine() {
 	// Skip leading CRLFs (RFC 2616 §4.1)
 	if (_skipLeadingCRLF())
@@ -399,7 +390,7 @@ void Request::_parseRequestLine() {
 	_state = HEADERS;
 }
 
-// Step 2: Parse headers — "Key: Value\r\n" lines, ended by "\r\n\r\n"
+// ── State: Parse Headers ──
 void Request::_parseHeaders() {
 	// Extract the header block
 	std::string headerBlock;
@@ -437,7 +428,7 @@ void Request::_parseHeaders() {
 	_decideBodyState();
 }
 
-// Step 3: Parse body — write data to temp file on disk
+// ── State: Parse Body (File Streaming) ──
 void Request::_parseBody() {
 	// Determine how much to write this call
 	size_t remaining = _contentLength - _bodyBytesWritten;
@@ -478,7 +469,7 @@ void Request::_parseBody() {
 		_state = COMPLETE;
 }
 
-// Step 4: Parse chunked body — read chunks until size 0, write to disk
+// ── State: Parse Chunked Body ──
 void Request::_parseChunkedBody() {
 	while (true) {
 		// Find chunk size line

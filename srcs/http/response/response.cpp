@@ -1,5 +1,4 @@
 #include "response.hpp"
-#include "../../cgi/CGIResponseParser.hpp"
 #include <sstream>
 #include <fstream>
 #include <cstdlib>
@@ -60,7 +59,6 @@ void Response::setBody(const std::string &body) {
 }
 
 // Set file-mode: store path + size, auto-set Content-Length.
-// Does NOT read the file — Person A streams it via getNextChunk().
 void Response::setFilePath(const std::string &path, size_t fileSize) {
 	_filePath = path;
 	_fileSize = fileSize;
@@ -87,9 +85,6 @@ bool Response::isCgi() const { return !_cgiScriptPath.empty(); }
 // Convenience Builders
 // ============================================================
 
-// Build an error page response.
-// If filePath is provided and the file is readable, uses that file as the body.
-// Otherwise, falls back to a generated default HTML page.
 void Response::buildErrorPage(int code, const std::string &filePath) {
 	setStatus(code);
 	setHeader("Content-Type", "text/html");
@@ -102,16 +97,12 @@ void Response::buildErrorPage(int code, const std::string &filePath) {
 	}
 }
 
-// Build a redirect response (301 / 302)
 void Response::buildRedirect(int code, const std::string &location) {
 	setStatus(code);
 	setHeader("Location", location);
 	setBody("");
 }
 
-// Build a headers-only response from pre-parsed CGI headers (for live streaming).
-// Person C's CGIHandler already parsed the raw stdout into a std::map.
-// This sets Transfer-Encoding: chunked and enters chunked mode (no Content-Length).
 void Response::buildFromCgiHeaders(const std::map<std::string, std::string> &cgiHeaders) {
 	// Extract status code from CGI headers (default 200)
 	int statusCode = 200;
@@ -136,7 +127,6 @@ void Response::buildFromCgiHeaders(const std::map<std::string, std::string> &cgi
 	_headersSent = true;
 }
 
-// Called by EventLoop when CGI stdout hits EOF — next getNextChunk() returns terminal chunk
 void Response::markDone() { _cgiEOF = true; }
 
 // ============================================================
@@ -161,9 +151,6 @@ std::string Response::getHeaders() const {
 	return oss.str();
 }
 
-// Returns the next chunk of the response.
-// Call 1: returns headers. Call 2+: returns body chunks.
-// When isDone() is true, stop calling.
 std::string Response::getNextChunk() {
 	if (_done)
 		return "";
@@ -177,9 +164,7 @@ std::string Response::getNextChunk() {
 		return getHeaders();
 	}
 
-	// Chunked mode (CGI live streaming): body is fed by EventLoop directly.
-	// When EventLoop calls markDone() after CGI EOF, we return the terminal chunk.
-	// Otherwise we return empty — EventLoop appends body chunks to writeBuffer itself.
+	// ── State: CGI Chunked Mode (Live Streaming) ──
 	if (_isChunked) {
 		if (_cgiEOF) {
 			_done = true;
@@ -188,18 +173,19 @@ std::string Response::getNextChunk() {
 		return "";
 	}
 
-	// String mode: body is sent in a single second call
+	// ── State: String Mode (HTML Errors / Redirects) ──
 	if (_filePath.empty()) {
 		_done = true;
 		return _body;
 	}
 
-	// File mode: read 8KB from disk using open/seekg/close (no ifstream member)
+	// ── State: File Mode (Static File Streaming) ──
 	std::ifstream file(_filePath.c_str(), std::ios::binary);
 	if (!file.is_open()) {
 		_done = true;
 		return "";
 	}
+	// ── Clarification: seekg is used to resume reading exactly where the last chunk left off, keeping memory usage at 8KB
 	file.seekg(static_cast<std::streamoff>(_fileOffset));
 
 	char buffer[8192];
@@ -215,8 +201,6 @@ std::string Response::getNextChunk() {
 
 bool Response::isDone() const { return _done; }
 
-// Format raw data as an HTTP chunk: <hex_size>\r\n<data>\r\n
-// Person A calls this to wrap CGI body bytes before appending to writeBuffer.
 std::string Response::formatChunk(const std::string &data) {
 	if (data.empty())
 		return "";
@@ -372,8 +356,6 @@ std::string Response::_generateErrorHtml(int code, const std::string &reason) {
 	return oss.str();
 }
 
-// Read an entire file into a string.
-// Returns true on success, false if the file doesn't exist or can't be read.
 bool Response::_readFile(const std::string &path, std::string &content) {
 	std::ifstream file(path.c_str(), std::ios::binary);
 	if (!file.is_open())

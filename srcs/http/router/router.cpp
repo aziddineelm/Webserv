@@ -16,21 +16,11 @@ Router &Router::operator=(const Router &other) { (void)other; return *this; }
 Router::~Router() {}
 
 // ============================================================
-// Core: handleRequest — the ONE method Person A calls
+// Core Routing Handler
 // ============================================================
-//
-// Decision flow:
-//   1. Match location (longest prefix)
-//   2. Check redirect
-//   3. Check method allowed
-//   4. Resolve path
-//   5. Route by method (POST/DELETE/GET)
-//   6. Check CGI dispatch
-//   7. Serve file / directory / 404
-//
 
 void Router::handleRequest(const Request &req, Response &res, const std::vector<LocationConfig> &locations) {
-	// 1. Match location (longest prefix)
+	// ── Step 1: Match Location (Longest Prefix) ──
 	const LocationConfig *loc = matchLocation(req.getPath(), locations);
 
 	// If the request itself has errors, respond immediately
@@ -51,35 +41,34 @@ void Router::handleRequest(const Request &req, Response &res, const std::vector<
 		return;
 	}
 
-	// 2. Check redirect
+	// ── Step 2: Check Redirect ──
 	if (loc->redirect_code != 0 && !loc->redirect_url.empty()) {
 		res.buildRedirect(loc->redirect_code, loc->redirect_url);
 		return;
 	}
 
-	// 3. Check method allowed
+	// ── Step 3: Check Allowed Methods ──
 	if (!_isMethodAllowed(req.getMethod(), *loc)) {
 		HttpUtils::buildErrorPage(405, *loc, res);
 		return;
 	}
 
-	// 4. Enforce client_max_body_size
+	// ── Step 4: Enforce client_max_body_size ──
 	if (loc->client_max_body_size > 0
 		&& req.getBodyBytesWritten() > loc->client_max_body_size) {
 		HttpUtils::buildErrorPage(413, *loc, res);
 		return;
 	}
 
-	// 5. Resolve URI → filesystem path
+	// ── Step 5: Resolve URI to Filesystem Path ──
 	std::string filePath = _resolvePath(req.getPath(), *loc);
 
-	// 5b. Block path traversal
 	if (filePath.empty() || HttpUtils::hasPathTraversal(filePath)) {
 		HttpUtils::buildErrorPage(403, *loc, res);
 		return;
 	}
 
-	// 6. Route the request (CGI vs Method)
+	// ── Step 6: Route Request (CGI vs Static Method) ──
 	std::string ext = HttpUtils::getExtension(filePath);
 	if (!ext.empty() && loc->cgi_map.find(ext) != loc->cgi_map.end()) {
 		// CGI dispatch (handles GET, POST, etc.)
@@ -140,14 +129,8 @@ bool Router::_isMethodAllowed(const std::string &method, const LocationConfig &l
 }
 
 // ============================================================
-// Private: Path Resolution — URI → Filesystem
+// Path Resolution (URI to Filesystem)
 // ============================================================
-//
-// Subject requirement (line 170–173):
-//   if URL /kapouet is rooted to /tmp/www,
-//   URL /kapouet/pouic/toto/pouet will search for
-//   /tmp/www/pouic/toto/pouet
-//
 
 std::string Router::_resolvePath(const std::string &uri, const LocationConfig &loc) {
 	// Alias replaces the location prefix entirely with a different path
@@ -226,15 +209,9 @@ void Router::_handleDelete(const std::string &filePath, const LocationConfig &lo
 }
 
 // ============================================================
-// Static: Virtual Host Resolution — NGINX Algorithm
+// Virtual Host Resolution (NGINX Algorithm)
 // ============================================================
-//
-// Resolution order:
-//   1. Filter configs that listen on listenPort
-//   2. Strip port suffix from Host header (e.g. "host:8080" -> "host")
-//   3. Exact match against each config's server_names list
-//   4. Fallback to first port-matching config (NGINX default behavior)
-//
+
 const ServerConfig *Router::resolveVirtualHost(const Request &req, int listenPort, const std::vector<ServerConfig> &configs)
 {
 	// Extract and normalize Host header — strip optional ":port" suffix
