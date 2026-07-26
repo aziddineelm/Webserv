@@ -15,6 +15,12 @@
 #include "EnvBuilder.hpp"
 #include "../http/request/request.hpp"
 #include "../config/ServerConfig.hpp"
+namespace {
+    const size_t MAX_PATH_LEN = 4096;
+    const size_t READ_BUF_SIZE = 4096;
+    const size_t BODY_BUF_SIZE = 8192;
+    const size_t MAX_HEADERS_SIZE = 65536;
+}
 
 // --- Construction / Destruction ---
 
@@ -185,17 +191,18 @@ bool CGIHandler::startFromFile(const std::string& scriptPath,
 bool CGIHandler::startFromRequest(const Request& req,
                                   const ServerConfig& config,
                                   const std::string& scriptPath,
-                                  const std::string& interpreterPath)
+                                  const std::string& interpreterPath,
+                                  const std::string& clientIp)
 {
     const LocationConfig* loc = config.matchLocation(req.getUri());
     int idleTimeoutSec = loc ? loc->cgi_idle_timeout : 30;
     int maxTimeoutSec  = loc ? loc->cgi_max_timeout  : 0;
 
     EnvBuilder envBuilder;
-    std::vector<std::string> envVars = envBuilder.buildFromRequest(req, config);
+    std::vector<std::string> envVars = envBuilder.buildEnv(req, config, clientIp);
 
     std::string resolvedScript = scriptPath;
-    char resolvedBuf[4096];
+    char resolvedBuf[MAX_PATH_LEN];
     if (realpath(resolvedScript.c_str(), resolvedBuf) != NULL) {
         resolvedScript = resolvedBuf;
     }
@@ -226,7 +233,7 @@ void CGIHandler::onStdinReady() {
 
     // If the in-memory buffer is exhausted, try to refill from the body file.
     if (_bodyFileFd >= 0 && _inputPos >= _input.size()) {
-        char buf[8192];
+        char buf[BODY_BUF_SIZE];
         ssize_t bytesRead = read(_bodyFileFd, buf, sizeof(buf));
         if (bytesRead > 0) {
             _input.assign(buf, static_cast<size_t>(bytesRead));
@@ -260,7 +267,7 @@ void CGIHandler::onStdinReady() {
 void CGIHandler::onStdoutReady() {
     if (_stdoutFd < 0 || _state == CGI_DONE || _state == CGI_ERROR) return;
 
-    char buf[4096];
+    char buf[READ_BUF_SIZE];
     ssize_t n = read(_stdoutFd, buf, sizeof(buf));
     if (n > 0) {
         // Update inactivity timer on every successful read
@@ -271,7 +278,7 @@ void CGIHandler::onStdoutReady() {
             _rawBuffer.append(buf, static_cast<size_t>(n));
 
             // Safety: reject CGI output with absurdly large headers (64KB limit)
-            if (_rawBuffer.size() > 65536) {
+            if (_rawBuffer.size() > MAX_HEADERS_SIZE) {
                 _error = "CGIHandler: CGI headers exceeded 64KB limit";
                 _state = CGI_ERROR;
                 closeFd(_stdoutFd);
@@ -307,7 +314,7 @@ void CGIHandler::onStdoutReady() {
 void CGIHandler::onStderrReady() {
     if (_stderrFd < 0 || _state == CGI_DONE || _state == CGI_ERROR) return;
 
-    char buf[4096];
+    char buf[READ_BUF_SIZE];
     ssize_t n = read(_stderrFd, buf, sizeof(buf));
     if (n > 0) {
         _error.append(buf, static_cast<size_t>(n));

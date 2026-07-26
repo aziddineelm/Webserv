@@ -10,7 +10,7 @@ sys.stdout.flush()
 import os
 
 # Stream a local video file to avoid any internet/bot blocking issues
-video_path = "/home/anbaya/Desktop/Webserv/www/media/test_video.mp4"
+video_path = "../uploads/test_video.mp4"
 
 try:
     with open(video_path, "rb") as f:

@@ -15,31 +15,21 @@ int ProcessSpawner::spawn(const std::vector<std::string>& argv,
 
     if (argv.empty()) return -1;
 
-    int inPipe[2];
-    int outPipe[2];
-    int errPipe[2];
-    if (pipe(inPipe) == -1) return -1;
-    if (pipe(outPipe) == -1) {
-        close(inPipe[0]);
-        close(inPipe[1]);
-        return -1;
-    }
-    if (pipe(errPipe) == -1) {
-        close(inPipe[0]);
-        close(inPipe[1]);
-        close(outPipe[0]);
-        close(outPipe[1]);
+    const size_t MAX_PATH_LEN = 4096;
+    int inPipe[2] = {-1, -1}, outPipe[2] = {-1, -1}, errPipe[2] = {-1, -1};
+
+    if (pipe(inPipe) == -1 || pipe(outPipe) == -1 || pipe(errPipe) == -1) {
+        if (inPipe[0] != -1) { close(inPipe[0]); close(inPipe[1]); }
+        if (outPipe[0] != -1) { close(outPipe[0]); close(outPipe[1]); }
+        if (errPipe[0] != -1) { close(errPipe[0]); close(errPipe[1]); }
         return -1;
     }
 
     pid_t pid = fork();
     if (pid == -1) {
-        close(inPipe[0]);
-        close(inPipe[1]);
-        close(outPipe[0]);
-        close(outPipe[1]);
-        close(errPipe[0]);
-        close(errPipe[1]);
+        close(inPipe[0]); close(inPipe[1]);
+        close(outPipe[0]); close(outPipe[1]);
+        close(errPipe[0]); close(errPipe[1]);
         return -1;
     }
 
@@ -59,7 +49,7 @@ int ProcessSpawner::spawn(const std::vector<std::string>& argv,
         close(errPipe[1]);
 
         // Resolve script to absolute path before chdir so execve can find it.
-        char resolvedPath[4096];
+        char resolvedPath[MAX_PATH_LEN];
         std::string absScript = argv[0];
         if (realpath(argv[0].c_str(), resolvedPath) != NULL) {
             absScript = resolvedPath;

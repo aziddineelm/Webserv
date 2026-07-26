@@ -64,7 +64,8 @@ public:
     bool startFromRequest(const Request& req,
                           const ServerConfig& config,
                           const std::string& scriptPath,
-                          const std::string& interpreterPath);
+                          const std::string& interpreterPath,
+                          const std::string& clientIp = "");
 
     // Called by the main loop when poll() reports stdinFd is writable.
     void onStdinReady();
