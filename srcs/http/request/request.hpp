@@ -39,7 +39,6 @@ public:
 	const std::string&	getVersion() const;
 	std::string			getHeader(const std::string& key) const;
 	const std::map<std::string, std::string>&	getHeaders() const;
-	const std::string&	getBody() const;
 	const std::string&	getBodyFilePath() const;
 	size_t				getBodyBytesWritten() const;
 	int					getErrorCode() const;
@@ -54,7 +53,6 @@ private:
 	std::string		_queryString;
 	std::string		_version;
 	std::map<std::string, std::string>	_headers;
-	std::string		_body;
 
 	// Body-to-disk state (Phase 4 — prevents OOM on large uploads)
 	std::string		_bodyFilePath;

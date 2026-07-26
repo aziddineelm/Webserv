@@ -59,8 +59,6 @@ void Response::setBody(const std::string &body) {
 	_headers["Content-Length"] = oss.str();
 }
 
-const std::string &Response::getBody() const { return _body; }
-
 // Set file-mode: store path + size, auto-set Content-Length.
 // Does NOT read the file — Person A streams it via getNextChunk().
 void Response::setFilePath(const std::string &path, size_t fileSize) {

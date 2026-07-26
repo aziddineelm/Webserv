@@ -134,7 +134,7 @@ classDiagram
         +getMethod() string
         +getUri() string
         +getHeader(key) string
-        +getBody() string
+        +getBodyFilePath() string
         +isKeepAlive() bool
     }
 

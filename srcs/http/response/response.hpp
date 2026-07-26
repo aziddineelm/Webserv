@@ -18,7 +18,6 @@ public:
 	void	setHeader(const std::string &key, const std::string &value);
 	void	setBody(const std::string &body);
 	int		getStatusCode() const;
-	const std::string &getBody() const;
 
 	// File streaming — sets file mode instead of loading into RAM
 	void	setFilePath(const std::string &path, size_t fileSize);

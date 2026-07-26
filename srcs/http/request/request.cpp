@@ -31,7 +31,6 @@ Request &Request::operator=(const Request &other) {
 		_queryString = other._queryString;
 		_version = other._version;
 		_headers = other._headers;
-		_body = other._body;
 		_buffer = other._buffer;
 		_bodyFilePath = other._bodyFilePath;
 		_bodyBytesWritten = other._bodyBytesWritten;
@@ -91,7 +90,6 @@ void Request::reset() {
 	_queryString.clear();
 	_version.clear();
 	_headers.clear();
-	_body.clear();
 	_bodyBytesWritten = 0;
 	_maxBodySize = 0;
 	_state = REQUEST_LINE;
@@ -124,7 +122,6 @@ std::string Request::getHeader(const std::string &key) const {
 const std::map<std::string, std::string> &Request::getHeaders() const {
  	return _headers;
 }
-const std::string &Request::getBody() const { return _body; }
 const std::string &Request::getBodyFilePath() const { return _bodyFilePath; }
 size_t Request::getBodyBytesWritten() const { return _bodyBytesWritten; }
 int Request::getErrorCode() const { return _errorCode; }

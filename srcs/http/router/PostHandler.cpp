@@ -44,18 +44,12 @@ void PostHandler::_saveRawBody(const Request &req, const LocationConfig &loc, Re
 			unlink(req.getBodyFilePath().c_str());
 		}
 	} else {
-		std::ofstream out(savePath.c_str(), std::ios::binary);
+		// ── Create an empty file for a 0-byte POST request ──
+		std::ofstream out(savePath.c_str());
 		if (!out.is_open()) {
 			HttpUtils::buildErrorPage(500, loc, res);
 			return;
 		}
-		out.write(req.getBody().c_str(), req.getBody().size());
-		if (out.fail() || out.bad()) {
-			out.close();
-			HttpUtils::buildErrorPage(500, loc, res);
-			return;
-		}
-		out.close();
 	}
 
 	res.setStatus(201);

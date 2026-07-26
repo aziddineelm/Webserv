@@ -217,7 +217,7 @@ bool CGIHandler::startFromRequest(const Request& req,
     if (!bodyFilePath.empty()) {
         return startFromFile(resolvedScript, interpreterPath, envVars, bodyFilePath, idleTimeoutSec, maxTimeoutSec);
     } else {
-        return start(resolvedScript, interpreterPath, envVars, req.getBody(), idleTimeoutSec, maxTimeoutSec);
+        return start(resolvedScript, interpreterPath, envVars, "", idleTimeoutSec, maxTimeoutSec);
     }
 }
 
