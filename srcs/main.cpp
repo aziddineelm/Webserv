@@ -3,11 +3,10 @@
 #include <iostream>
 #include <csignal>
 #include <cstdlib>
-#include <vector>
 
-// --------------------------------------------------------------------------
-// Global signal flag — checked by Server::run() loop
-// --------------------------------------------------------------------------
+// ==========================================================================
+// Signal Handling
+// ==========================================================================
 
 volatile sig_atomic_t g_running = 1;
 
@@ -16,31 +15,27 @@ static void signalHandler(int signum) {
 	g_running = 0;
 }
 
-static void	setupSignals(){
+static void	setupSignals() {
 	signal(SIGPIPE, SIG_IGN);          // Don't die on broken pipe (send to closed client)
 	signal(SIGINT, signalHandler);     // Ctrl+C → graceful shutdown
 	signal(SIGQUIT, signalHandler);    // Ctrl+\ → graceful shutdown
 }
 
-// --------------------------------------------------------------------------
+// ==========================================================================
 // Main
-// --------------------------------------------------------------------------
+// ==========================================================================
 
 int main(int argc, char **argv) {
-	// --- Signal setup ---
+
 	setupSignals();
 
-	// --- Config file path (default or from argv) ---
 	if (argc > 2) {
 		std::cerr << "Usage: " << argv[0] << " [config_file]" << std::endl;
 		return 1;
 	}
 	
-	std::string configPath = "config/default.conf";
-	if (argc == 2)
-		configPath = argv[1];
+	std::string configPath = (argc == 2) ? argv[1] : "config/default.conf";
 
-	// --- Parse configuration ---
 	try {
 		ConfigParser parser(configPath);
 		parser.parse();
@@ -48,13 +43,8 @@ int main(int argc, char **argv) {
 
 		std::cout << "[main] Configuration loaded from: " << configPath << std::endl;
 
-		// Extract unique ports from all server blocks
-		std::vector<int> ports = parser.getPorts();
-
-		// --- Initialize and run ---
 		Server server;
-
-		if (!server.init(ports, parser.getServers())) {
+		if (!server.init(parser.getPorts(), parser.getServers())) {
 			std::cerr << "[main] Server initialization failed" << std::endl;
 			return 1;
 		}
@@ -65,7 +55,10 @@ int main(int argc, char **argv) {
 		std::cerr << "[main] Configuration error: " << e.what() << std::endl;
 		return 1;
 	}
+	catch (const std::exception &e) {
+		std::cerr << "[main] Error: " << e.what() << std::endl;
+		return 1;
+	}
 
-	// Destructor handles cleanup (RAII)
 	return 0;
 }
