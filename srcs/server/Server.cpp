@@ -1,9 +1,9 @@
 #include "Server.hpp"
 #include <iostream>
 
-// --------------------------------------------------------------------------
-// Constructor / Destructor
-// --------------------------------------------------------------------------
+// ==========================================================================
+// Constructor & Destructor
+// ==========================================================================
 
 Server::Server() {
 }
@@ -15,9 +15,9 @@ Server::~Server() {
 	std::cout << "[Server] All sockets cleaned up" << std::endl;
 }
 
-// --------------------------------------------------------------------------
-// Public: init
-// --------------------------------------------------------------------------
+// ==========================================================================
+// Initialization
+// ==========================================================================
 
 bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig> &configs) {
 	_eventLoop.setConfigs(configs);
@@ -32,15 +32,15 @@ bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig>
 			std::cerr << "[Server] Failed to set up socket on port "
 					  << ports[i] << std::endl;
 			delete sock;
-			// Clean up already created sockets
+			
+			// Clean up already created sockets on partial failure
 			for (size_t j = 0; j < _sockets.size(); ++j)
 				delete _sockets[j];
 			_sockets.clear();
+			
 			return false;
 		}
 		_sockets.push_back(sock);
-
-		// Register with EventLoop for poll() monitoring
 		_eventLoop.addListenFd(sock->getFd(), sock->getPort());
 	}
 
@@ -49,17 +49,13 @@ bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig>
 	return true;
 }
 
-// --------------------------------------------------------------------------
-// Public: run — delegates to EventLoop
-// --------------------------------------------------------------------------
+// ==========================================================================
+// Core Operations
+// ==========================================================================
 
 void Server::run() {
 	_eventLoop.run();
 }
-
-// --------------------------------------------------------------------------
-// Public: stop — delegates to EventLoop
-// --------------------------------------------------------------------------
 
 void Server::stop() {
 	_eventLoop.stop();
