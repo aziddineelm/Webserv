@@ -490,6 +490,9 @@ A design pattern where a single thread waits for events on multiple handles (FDs
 │        ├─ Client FD writable? → send()           │
 │        │       └→ Write response from buffer     │
 │        │                                         │
+│        ├─ CGI Pipe FD ready? → read/write pipe   │
+│        │       └→ Buffer CGI data / stream chunks│
+│        │                                         │
 │        ├─ Client FD error/hangup? → close()      │
 │        │       └→ Remove from poll set, cleanup  │
 │        │                                         │
@@ -514,10 +517,16 @@ Each client connection progresses through states:
    PARSING_REQUEST     │
        │               │
        ▼               │
-   PROCESSING ─────────┤ (may trigger CGI)
+   PROCESSING ─────────┤
+       │               │
+       │               ▼
+       │         STATE_CGI_RUNNING (epoll watches pipes)
+       │               │
+       │               ▼
+       │         STATE_CGI_STREAMING (streaming output)
        │               │
        ▼               │
-   WRITING_RESPONSE    │
+   WRITING_RESPONSE ◀──┘
        │               │
        ├── keep-alive ─┘
        │
@@ -612,6 +621,25 @@ A client can connect and then do nothing (slowloris attack, or just a broken cli
 
 ---
 
+## 15. Advanced: Non-Blocking CGI & Streaming (Your Implementation)
+
+### 15.1 Non-Blocking CGI via Epoll
+Most basic servers `waitpid()` and block while a CGI runs. **Your server does not.**
+When a CGI starts:
+1. `fork()` and `execve()` run the script.
+2. The `pipe()` FDs (stdin/stdout/stderr for the CGI) are **added to the `epoll` watch list**.
+3. The server goes back to serving other clients.
+4. When the CGI produces output, `epoll` triggers `_handleCgiReady()`.
+
+### 15.2 HTTP Chunked Transfer Encoding & Streaming
+If a CGI script produces 1GB of data, you cannot store it all in memory.
+- **Your Solution (`STATE_CGI_STREAMING`):** As data arrives from the CGI pipe, your event loop wraps it in HTTP "Chunks" (e.g., `1A\r\n<data>\r\n`) and sends it immediately to the client. 
+- You do the same for large static files (calling `response.getNextChunk()`).
+
+**Search:** `HTTP Chunked Transfer Encoding`, `non-blocking CGI pipes`, `epoll pipe`
+
+---
+
 ## Learning Order Summary
 
 ```
@@ -635,4 +663,5 @@ WEEK 1-2 (Person A Deep Dive):
   13. Signals (SIGPIPE, SIGINT, SIGCHLD)
   14. Multiple Listening Sockets
   15. Timeouts & Connection Management
+  16. Advanced: Non-Blocking CGI & Chunked Streaming
 ```
