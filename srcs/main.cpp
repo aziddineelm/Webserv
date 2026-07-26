@@ -16,7 +16,7 @@ static void signalHandler(int signum) {
 	g_running = 0;
 }
 
-void	setupSignals(){
+static void	setupSignals(){
 	signal(SIGPIPE, SIG_IGN);          // Don't die on broken pipe (send to closed client)
 	signal(SIGINT, signalHandler);     // Ctrl+C → graceful shutdown
 	signal(SIGQUIT, signalHandler);    // Ctrl+\ → graceful shutdown
