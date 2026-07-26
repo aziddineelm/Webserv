@@ -426,7 +426,7 @@ void EventLoop::_handleCgiReady(int pipeFd, uint32_t events) {
 		client.response.setHeader("Connection",
 			client.request.isKeepAlive() ? "keep-alive" : "close");
 
-		client.writeBuffer = client.response.getHeaders();
+		client.writeBuffer = client.response.getNextChunk();  // Returns headers, sets _headersSent
 		client.writeOffset = 0;
 		client.state = STATE_CGI_STREAMING;
 		_setEpollEvents(clientFd, EPOLLOUT);
