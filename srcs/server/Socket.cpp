@@ -77,8 +77,6 @@ bool Socket::_setOptions() {
 	if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
 		std::cerr << "[Socket] setsockopt(SO_REUSEADDR) failed: "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;
@@ -92,8 +90,6 @@ bool Socket::_bindSocket() {
 	if (bind(_fd, (struct sockaddr *)&_addr, sizeof(_addr)) == -1) {
 		std::cerr << "[Socket] bind() failed on port " << _port << ": "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;
@@ -103,8 +99,6 @@ bool Socket::_startListening() {
 	if (listen(_fd, 128) == -1) {
 		std::cerr << "[Socket] listen() failed on port " << _port << ": "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;
@@ -114,8 +108,6 @@ bool Socket::_setNonBlocking() {
 	if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1) {
 		std::cerr << "[Socket] fcntl(O_NONBLOCK) failed on port " << _port << ": "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;

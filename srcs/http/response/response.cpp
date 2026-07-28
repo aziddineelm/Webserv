@@ -135,7 +135,6 @@ void Response::buildFromCgiHeaders(const std::map<std::string, std::string> &cgi
 	_headers.erase("Content-Length");
 	setHeader("Transfer-Encoding", "chunked");
 	_isChunked = true;
-	_headersSent = true;
 }
 
 // Called by EventLoop when CGI stdout hits EOF — next getNextChunk() returns terminal chunk
