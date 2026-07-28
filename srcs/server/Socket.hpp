@@ -28,7 +28,7 @@ private:
 	bool	_startListening();
 	bool	_setNonBlocking();
 
-	// Non-copyable (prevent double close)
+	// Non-copyable
 	Socket(const Socket &);
 	Socket &operator=(const Socket &);
 };

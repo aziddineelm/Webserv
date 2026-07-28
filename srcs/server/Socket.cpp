@@ -1,15 +1,14 @@
 #include "Socket.hpp"
 #include <iostream>
-#include <cstring>    // memset, strerror
-#include <cerrno>     // errno
-#include <unistd.h>   // close
-#include <fcntl.h>    // fcntl, O_NONBLOCK
-#include <sys/socket.h> // socket, AF_INET, SOCK_STREAM, SOL_SOCKET
-#include <arpa/inet.h> // htonl, htons
+#include <cstring>
+#include <cerrno>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
-// --------------------------------------------------------------------------
-// Constructor / Destructor
-// --------------------------------------------------------------------------
+
+// Constructor & Destructor
 
 Socket::Socket() : _fd(-1), _port(0) {
 	std::memset(&_addr, 0, sizeof(_addr));
@@ -23,9 +22,8 @@ Socket::~Socket() {
 	}
 }
 
-// --------------------------------------------------------------------------
-// Public: setup
-// --------------------------------------------------------------------------
+
+// Core Operations
 
 bool Socket::setup(int port) {
 	_port = port;
@@ -46,9 +44,8 @@ bool Socket::setup(int port) {
 	return true;
 }
 
-// --------------------------------------------------------------------------
+
 // Getters
-// --------------------------------------------------------------------------
 
 int Socket::getFd() const {
 	return _fd;
@@ -58,9 +55,8 @@ int Socket::getPort() const {
 	return _port;
 }
 
-// --------------------------------------------------------------------------
-// Private helpers — one syscall each
-// --------------------------------------------------------------------------
+
+// Low-Level Syscall Wrappers
 
 bool Socket::_createSocket() {
 	_fd = socket(AF_INET, SOCK_STREAM, 0);
