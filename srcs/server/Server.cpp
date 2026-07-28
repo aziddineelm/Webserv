@@ -20,7 +20,9 @@ Server::~Server() {
 // ==========================================================================
 
 bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig> &configs) {
+
 	_eventLoop.setConfigs(configs);
+
 	if (ports.empty()) {
 		std::cerr << "[Server] Error: no ports to listen on" << std::endl;
 		return false;
@@ -33,7 +35,6 @@ bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig>
 					  << ports[i] << std::endl;
 			delete sock;
 			
-			// Clean up already created sockets on partial failure
 			for (size_t j = 0; j < _sockets.size(); ++j)
 				delete _sockets[j];
 			_sockets.clear();
@@ -46,6 +47,7 @@ bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig>
 
 	std::cout << "[Server] Initialized with " << _sockets.size()
 			  << " listening socket(s)" << std::endl;
+
 	return true;
 }
 
