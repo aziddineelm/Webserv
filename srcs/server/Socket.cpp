@@ -11,7 +11,6 @@
 // Constructor & Destructor
 
 Socket::Socket() : _fd(-1), _port(0) {
-	std::memset(&_addr, 0, sizeof(_addr));
 }
 
 Socket::~Socket() {
@@ -79,11 +78,14 @@ bool Socket::_setOptions() {
 }
 
 bool Socket::_bindSocket() {
-	_addr.sin_family = AF_INET;
-	_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	_addr.sin_port = htons(_port);
+	struct sockaddr_in addr;
+	std::memset(&addr, 0, sizeof(addr));
+	
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(_port);
 
-	if (bind(_fd, (struct sockaddr *)&_addr, sizeof(_addr)) == -1) {
+	if (bind(_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
 		std::cerr << "[Socket] bind() failed on port " << _port << ": "
 				  << std::strerror(errno) << std::endl;
 		return false;

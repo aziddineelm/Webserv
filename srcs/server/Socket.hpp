@@ -19,7 +19,6 @@ public:
 private:
 	int					_fd;
 	int					_port;
-	struct sockaddr_in	_addr;
 
 	// Internal helpers — each wraps one syscall
 	bool	_createSocket();
