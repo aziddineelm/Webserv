@@ -38,27 +38,17 @@ public:
 
     // --- Non-blocking API (for main event loop integration) ---
 
-    // Start the CGI process with an in-memory body string.
-    // Suitable for small POST bodies. Returns true on success.
-    // idleTimeoutSec: nginx-style inactivity timeout (0 = disabled).
-    // maxTimeoutSec:  php-fpm-style absolute timeout (0 = disabled).
-    bool start(const std::string& scriptPath,
-               const std::string& interpreterPath,
-               const std::vector<std::string>& env,
-               const std::string& input,
-               int idleTimeoutSec = 30,
-               int maxTimeoutSec = 0);
-
     // Start the CGI process, streaming the POST body from a file on disk.
     // This avoids loading the entire body into RAM, preventing OOM on
     // large uploads (e.g. 5GB video files).
     // Pass an empty bodyFilePath to skip body input entirely.
-    bool startFromFile(const std::string& scriptPath,
-                       const std::string& interpreterPath,
-                       const std::vector<std::string>& env,
-                       const std::string& bodyFilePath,
-                       int idleTimeoutSec = 30,
-                       int maxTimeoutSec = 0);
+    bool start(const std::string& scriptPath,
+               const std::string& interpreterPath,
+               const std::vector<std::string>& env,
+               const std::string& bodyFilePath,
+               int idleTimeoutSec = 30,
+               int maxTimeoutSec = 0);
+
 
     // High-level wrapper: prepares environment, resolves symlinks, and starts CGI from an HTTP Request.
     bool startFromRequest(const Request& req,
@@ -91,7 +81,6 @@ public:
     int getStderrFd() const;
 
     CgiState getState() const;
-    const std::string& getOutput() const;
     const std::string& getError() const;
 
     // True if CGI process exited with status 0.
@@ -114,19 +103,6 @@ public:
     // Returns true when stdout is closed AND all queued output has been popped.
     bool outputFullyConsumed() const;
 
-    // --- Blocking API (backward-compatible, for tests) ---
-
-    // Runs the full CGI lifecycle in a blocking poll() loop.
-    // This is a convenience wrapper around the non-blocking API.
-    // Default idle timeout is 5s for tests (production uses 30s via start()).
-    bool run(const std::string& scriptPath,
-             const std::string& interpreterPath,
-             const std::vector<std::string>& env,
-             const std::string& input,
-             std::string& output,
-             std::string& error,
-             int idleTimeoutSec = 5,
-             int maxTimeoutSec = 0);
 
 private:
     CgiState _state;
@@ -135,9 +111,8 @@ private:
     int _stdoutFd;
     int _stderrFd;
 
-    std::string _input;      // In-memory body buffer (small bodies or current chunk)
+    std::string _input;      // Intermediate I/O buffer for reading from body file
     size_t _inputPos;
-    std::string _output;     // Full accumulated output (only used in blocking mode)
     std::string _error;
 
     int _bodyFileFd;         // FD for streaming body from temp file (-1 if unused)
@@ -148,7 +123,6 @@ private:
 
     // --- Streaming state ---
     bool _headersParsed;
-    bool _streamingMode;              // true = EventLoop path (skip _output accumulation)
     std::string _rawBuffer;           // Accumulates stdout until headers are found
     std::map<std::string, std::string> _cgiHeaders;  // Parsed CGI headers
     std::string _outputQueue;         // Body bytes ready for EventLoop to consume
