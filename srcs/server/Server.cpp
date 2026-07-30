@@ -15,9 +15,6 @@ Server::~Server() {
 	std::cout << "[Server] All sockets cleaned up" << std::endl;
 }
 
-// ==========================================================================
-// Initialization
-// ==========================================================================
 
 bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig> &configs) {
 
@@ -51,9 +48,6 @@ bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig>
 	return true;
 }
 
-// ==========================================================================
-// Core Operations
-// ==========================================================================
 
 void Server::run() {
 	_eventLoop.run();
