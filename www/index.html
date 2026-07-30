@@ -108,7 +108,7 @@
           <div class="form-row">
             <div class="form-group" style="flex:2">
               <label for="post-url">Request URL</label>
-              <input class="input" type="text" id="post-url" placeholder="e.g. /upload" value="/upload" />
+              <input class="input" type="text" id="post-url" placeholder="e.g. /uploads " value="/uploads" />
             </div>
             <div class="form-group" style="flex:1">
               <label for="post-content-type">Content-Type</label>
@@ -140,7 +140,7 @@
         <form id="post-file-form" autocomplete="off">
           <div class="form-group">
             <label for="post-file-url">Upload URL</label>
-            <input class="input" type="text" id="post-file-url" placeholder="e.g. /upload" value="/upload" />
+            <input class="input" type="text" id="post-file-url" placeholder="e.g. /uploads" value="/uploads" />
           </div>
           <div class="form-group">
             <label>File</label>
@@ -267,6 +267,13 @@
             <button class="btn btn--primary cgi-run-btn">▶ Run</button>
           </div>
 
+          <!-- stream_youtube.py -->
+          <div class="cgi-card" data-script="stream_youtube.py" data-method="GET">
+            <div class="cgi-card__name">stream_youtube.py</div>
+            <div class="cgi-card__desc">Streams a YouTube video seamlessly via chunked transfer encoding!</div>
+            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
+          </div>
+
           <!-- Session Test py -->
           <div class="cgi-card" data-script="session.py" data-method="GET">
             <div class="cgi-card__name">session.py</div>
@@ -287,15 +294,7 @@
             <div class="cgi-card__desc">Returns the current server time and date in JSON format.</div>
             <button class="btn btn--primary cgi-run-btn">▶ Run</button>
           </div>
-
-          <!-- Env PHP -->
-          <div class="cgi-card" data-script="env.php" data-method="GET">
-            <div class="cgi-card__name">env.php</div>
-            <div class="cgi-card__desc">Returns the CGI environment variables received by the server.</div>
-            <button class="btn btn--primary cgi-run-btn">▶ Run</button>
-          </div>
         </div>
-          
       </div>
 
       <div class="response-panel" id="cgi-response">

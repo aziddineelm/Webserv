@@ -258,7 +258,7 @@ server {
 - [x] Parse CGI output headers (e.g., `Content-Type`, `Status`)
 - [x] Handle **CGI timeout** (kill process if it runs too long)
 - [x] Make CGI execution **non-blocking** (integrate with Person A's event loop)
-- [x] Handle chunked request bodies (un-chunk before sending to CGI)
+- [x] Handle chunked request bodies (already un-chunked by Request parser)
 - [x] Test with a Python CGI script and/or PHP-CGI
 
 ### Phase 3 — Integration & Edge Cases (Week 4–5)

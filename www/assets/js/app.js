@@ -270,6 +270,13 @@
       btn.addEventListener('click', async () => {
         const card = btn.closest('.cgi-card');
         const script = card.dataset.script;
+        
+        // Let the browser handle streaming natively by opening in a new tab
+        if (script.startsWith('stream_')) {
+          window.open(`/cgi-bin/${script}`, '_blank');
+          return;
+        }
+
         const method = card.dataset.method || 'GET';
         const inputEl = card.querySelector('.cgi-input');
         const body = inputEl ? inputEl.value : '';
