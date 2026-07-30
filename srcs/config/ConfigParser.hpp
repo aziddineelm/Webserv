@@ -38,6 +38,15 @@ private:
     // Parse a `location` block and attach it to `currentServer`.
     void parseLocationBlock(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end, ServerConfig& currentServer);
 
+    // Helper to enforce minimum argument count for a directive
+    void requireArgs(const std::vector<std::string>& args, const std::string& directive, size_t minCount = 1) const;
+    
+    // Helper to extract arguments until a semicolon, validating scope keywords
+    std::vector<std::string> extractArgs(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end, const std::string& directive, bool isServerScope) const;
+    
+    // Helper to safely join a directory path and a filename/path
+    std::string joinPaths(const std::string& path1, const std::string& path2) const;
+
 public:
     ConfigParser(const std::string& configFilePath);
     ~ConfigParser();

@@ -214,7 +214,7 @@ void CGIHandler::onStdoutReady() {
 
             // Safety: reject CGI output with absurdly large headers (MAX_HEADERS_SIZE limit)
             if (_rawBuffer.size() > MAX_HEADERS_SIZE) {
-                _error = "CGIHandler: CGI headers exceeded " + std::to_string(MAX_HEADERS_SIZE) + " bytes limit";
+                _error = "CGIHandler: CGI headers exceeded MAX_HEADERS_SIZE bytes limit";
                 _state = CGI_ERROR;
                 closeFd(_stdoutFd);
                 return;
