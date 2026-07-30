@@ -212,9 +212,9 @@ void CGIHandler::onStdoutReady() {
             // Phase 1: Accumulating data until we find header/body separator
             _rawBuffer.append(buf, static_cast<size_t>(n));
 
-            // Safety: reject CGI output with absurdly large headers (64KB limit)
+            // Safety: reject CGI output with absurdly large headers (MAX_HEADERS_SIZE limit)
             if (_rawBuffer.size() > MAX_HEADERS_SIZE) {
-                _error = "CGIHandler: CGI headers exceeded 64KB limit";
+                _error = "CGIHandler: CGI headers exceeded " + std::to_string(MAX_HEADERS_SIZE) + " bytes limit";
                 _state = CGI_ERROR;
                 closeFd(_stdoutFd);
                 return;
