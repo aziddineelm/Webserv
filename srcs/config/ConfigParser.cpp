@@ -377,9 +377,6 @@ void ConfigParser::validate() {
     }
 
     for (size_t i = 0; i < _servers.size(); ++i) {
-        if (_servers[i].listen_ports.empty()) {
-            throw ConfigException("No listen ports in server block");
-        }
         for (size_t p = 0; p < _servers[i].listen_ports.size(); ++p) {
             if (_servers[i].listen_ports[p] == 0) {
                 throw ConfigException("Invalid listen port in server block");

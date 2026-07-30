@@ -54,7 +54,7 @@ public:
     // This runs tokenization and parsing. On error it throws
     void parse();
 
-    // Validate the parsed configuration for semantic correctness.Checks for conflicting ports, missing required directives, and
+    // Validate the parsed configuration for semantic correctness.Checks for conflicting ports, missing required directives
     void validate();
 
     // @return A vector of ServerConfig objects parsed from the file.
