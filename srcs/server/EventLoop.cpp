@@ -1,36 +1,38 @@
 #include "EventLoop.hpp"
 #include <iostream>
-#include <cstring>		// strerror
-#include <cerrno>		// errno
-#include <unistd.h>		// close
-#include <fcntl.h>		// fcntl, O_NONBLOCK
-#include <netinet/in.h>	// sockaddr_in, ntohl, ntohs
-#include <sys/socket.h>	// recv, send, accept
-#include <csignal>		// sig_atomic_t
-#include <cstdlib>		// atoi
+#include <cstring>
+#include <cerrno>
+#include <unistd.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <csignal>
+#include <cstdlib>
 #include "../http/router/router.hpp"
 #include "../http/response/response.hpp"
 
-// External flag set by signal handler (defined in main.cpp)
+
+
+#define EPOLL_TIMEOUT_MS 1000
+#define CLIENT_TIMEOUT_SEC 60
+#define READ_BUFFER_SIZE 8192
+#define EPOLL_SIZE 1024
+#define MAX_EVENTS 1024
+
+
 extern volatile sig_atomic_t g_running;
 
-#define POLL_TIMEOUT_MS		1000	// Wake up every second for timeout checks
-#define CLIENT_TIMEOUT_SEC	60		// Close clients idle for 60 seconds
-#define READ_BUFFER_SIZE	8192	// Stack buffer for recv() — one read per poll cycle
 
-// --------------------------------------------------------------------------
+
 // Constructor / Destructor
-// --------------------------------------------------------------------------
-
 EventLoop::EventLoop() : _running(false) {
-	_epollFd = epoll_create(1024);
+	_epollFd = epoll_create(EPOLL_SIZE);
 	if (_epollFd < 0) {
 		std::cerr << "[EventLoop] epoll_create() error: " << std::strerror(errno) << std::endl;
 	}
 }
 
 EventLoop::~EventLoop() {
-	// Close all tracked client FDs (listening FDs are owned by Socket/Server)
 	for (std::map<int, Client>::iterator it = _clients.begin();
 		 it != _clients.end(); ++it) {
 		close(it->second.fd);
@@ -65,11 +67,10 @@ void EventLoop::run() {
 	_running = true;
 	std::cout << "[EventLoop] Running... (press Ctrl+C to stop)" << std::endl;
 
-	const int MAX_EVENTS = 1024;
 	struct epoll_event events[MAX_EVENTS];
 
 	while (_running && g_running) {
-		int numEvents = epoll_wait(_epollFd, events, MAX_EVENTS, POLL_TIMEOUT_MS);
+		int numEvents = epoll_wait(_epollFd, events, MAX_EVENTS, EPOLL_TIMEOUT_MS);
 
 		if (numEvents < 0) {
 			if (errno == EINTR)
