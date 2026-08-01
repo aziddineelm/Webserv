@@ -369,7 +369,7 @@ void EventLoop::_handleKeepAlive(int clientFd, Client &client) {
 		client.lastActivity = time(NULL);
 		_setEpollEvents(clientFd, EPOLLIN);
 	} else {
-		std::cout << "[EventLoop] Connection: close requested, disconnecting fd " << clientFd << std::endl;
+		std::cout << "[EventLoop] Closing connection: client (fd=" << clientFd << ")" << std::endl;
 		_handleDisconnect(clientFd);
 	}
 }
@@ -467,6 +467,37 @@ void EventLoop::_handleCgiReady(int pipeFd, uint32_t events) {
 	}
 }
 
+// --------------------------------------------------------------------------
+// Event: Client disconnect — cleanup resources
+// --------------------------------------------------------------------------
+
+void EventLoop::_handleDisconnect(int clientFd) {
+	std::map<int, Client>::iterator it = _clients.find(clientFd);
+	if (it == _clients.end())
+		return;
+	// if the client is running a cgi process, clean up the cgi process
+	if (it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING) {
+		int stdoutFd = it->second.cgi.getStdoutFd();
+		int stderrFd = it->second.cgi.getStderrFd();
+		int stdinFd  = it->second.cgi.getStdinFd();
+		if (stdoutFd >= 0) {
+			_removeEpollFd(stdoutFd);
+			_cgiToClient.erase(stdoutFd); 
+		}
+		if (stderrFd >= 0) {
+			_removeEpollFd(stderrFd);
+			_cgiToClient.erase(stderrFd); 
+		}
+		if (stdinFd  >= 0) {
+			_removeEpollFd(stdinFd);
+			_cgiToClient.erase(stdinFd); 
+		}
+	}
+	_removeEpollFd(clientFd);
+	close(clientFd);
+	_clients.erase(clientFd);
+}
+
 
 // --------------------------------------------------------------------------
 // epoll helpers
@@ -500,25 +531,6 @@ void EventLoop::_setEpollEvents(int fd, uint32_t events) {
 	}
 }
 
-
-// --------------------------------------------------------------------------
-// Event: Client disconnect — cleanup resources
-// --------------------------------------------------------------------------
-
-void EventLoop::_handleDisconnect(int clientFd) {
-	std::map<int, Client>::iterator it = _clients.find(clientFd);
-	if (it != _clients.end() && (it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING)) {
-		int stdoutFd = it->second.cgi.getStdoutFd();
-		int stderrFd = it->second.cgi.getStderrFd();
-		int stdinFd  = it->second.cgi.getStdinFd();
-		if (stdoutFd >= 0) { _removeEpollFd(stdoutFd); _cgiToClient.erase(stdoutFd); }
-		if (stderrFd >= 0) { _removeEpollFd(stderrFd); _cgiToClient.erase(stderrFd); }
-		if (stdinFd  >= 0) { _removeEpollFd(stdinFd);  _cgiToClient.erase(stdinFd);  }
-	}
-	_removeEpollFd(clientFd);
-	close(clientFd);
-	_clients.erase(clientFd);
-}
 
 
 // --------------------------------------------------------------------------
