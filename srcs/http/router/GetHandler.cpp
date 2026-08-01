@@ -117,7 +117,7 @@ void GetHandler::_generateDirListing(const std::string &dirPath, const std::stri
 		std::string displayName = entries[i];
 		if (isDir) displayName += "/";
 
-		oss << "<li><a href=\"" << entries[i];
+		oss << "<li><a href=\"" << uri << entries[i];
 		if (isDir) oss << "/";
 		oss << "\">" << displayName << "</a></li>\n";
 	}

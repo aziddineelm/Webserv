@@ -30,7 +30,7 @@ namespace {
     }
 
     size_t parseSizeWithUnit(const std::string& value) {
-        if (value.empty()) return 0;
+        if (value.empty()) return static_cast<size_t>(-1);
         char unit = value[value.size() - 1];
         std::string numberPart = value;
         size_t multiplier = 1;
@@ -40,10 +40,10 @@ namespace {
             if (unit == 'K' || unit == 'k') multiplier = 1024;
             else if (unit == 'M' || unit == 'm') multiplier = 1024 * 1024;
             else if (unit == 'G' || unit == 'g') multiplier = 1024 * 1024 * 1024;
-            else return 0;
+            else return static_cast<size_t>(-1);
         }
 
-        if (!isNumber(numberPart)) return 0;
+        if (!isNumber(numberPart)) return static_cast<size_t>(-1);
         return static_cast<size_t>(std::atol(numberPart.c_str())) * multiplier;
     }
 
@@ -60,6 +60,44 @@ namespace {
                value == "cgi_idle_timeout" || value == "cgi_max_timeout" ||
                value == "upload_store" ||
                value == "client_max_body_size" || value == "location" || value == "server";
+    }
+}
+
+void ConfigParser::requireArgs(const std::vector<std::string>& args, const std::string& directive, size_t minCount) const {
+    if (args.size() < minCount) {
+        throw ConfigException(directive + " directive missing arguments");
+    }
+}
+
+std::vector<std::string> ConfigParser::extractArgs(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end, const std::string& directive, bool isServerScope) const {
+    std::vector<std::string> args;
+    ++it; // Skip the directive word itself
+    while (it != end && *it != ";" && *it != "{" && *it != "}") {
+        bool invalidWord = isServerScope ? isServerDirectiveWord(*it) : isLocationDirectiveWord(*it);
+        if (invalidWord) {
+            throw ConfigException("Missing semicolon after directive: " + directive);
+        }
+        args.push_back(*it);
+        ++it;
+    }
+    
+    if (it == end || *it != ";") {
+        throw ConfigException("Missing semicolon after directive: " + directive);
+    }
+    
+    return args;
+}
+
+std::string ConfigParser::joinPaths(const std::string& path1, const std::string& path2) const {
+    if (path1.empty()) return path2;
+    if (path2.empty()) return path1;
+    
+    if (path1[path1.size() - 1] == '/' && path2[0] == '/') {
+        return path1 + path2.substr(1);
+    } else if (path1[path1.size() - 1] != '/' && path2[0] != '/') {
+        return path1 + "/" + path2;
+    } else {
+        return path1 + path2;
     }
 }
 
@@ -108,24 +146,11 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
             ++it;
             parseLocationBlock(it, end, newServer);
         } else {
-            // Read until ';'
-            std::vector<std::string> args;
-            ++it;
-            while (it != end && *it != ";" && *it != "{" && *it != "}") {
-                if (isServerDirectiveWord(*it)) {
-                    throw ConfigException("Missing semicolon after directive: " + directive);
-                }
-                args.push_back(*it);
-                ++it;
-            }
-            
-            if (it == end || *it != ";") {
-                throw ConfigException("Missing semicolon after directive: " + directive);
-            }
+            std::vector<std::string> args = extractArgs(it, end, directive, true);
             
             // Process specific server directives
             if (directive == "listen") {
-                if (args.empty()) throw ConfigException("listen directive missing arguments");
+                requireArgs(args, directive);
                 std::string value = args[0];
                 uint16_t port;
                 size_t colon = value.find(':');
@@ -150,21 +175,21 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
                 newServer.server_names = args;
             }
             else if (directive == "root") {
-                if (args.empty()) throw ConfigException("root directive missing arguments");
+                requireArgs(args, directive);
                 newServer.root = args[0];
             }
             else if (directive == "index") {
-                if (args.empty()) throw ConfigException("index directive missing arguments");
+                requireArgs(args, directive);
                 newServer.index = args[0];
             }
             else if (directive == "client_max_body_size") {
-                if (args.empty()) throw ConfigException("client_max_body_size directive missing arguments");
+                requireArgs(args, directive);
                 size_t parsedSize = parseSizeWithUnit(args[0]);
-                if (parsedSize == 0) throw ConfigException("Invalid client_max_body_size: " + args[0]);
+                if (parsedSize == static_cast<size_t>(-1)) throw ConfigException("Invalid client_max_body_size: " + args[0]);
                 newServer.client_max_body_size = parsedSize;
             }
             else if (directive == "error_page") {
-                if (args.size() < 2) throw ConfigException("error_page directive missing arguments");
+                requireArgs(args, directive, 2);
                 std::string path = args[args.size() - 1];
                 for (size_t i = 0; i + 1 < args.size(); ++i) {
                     if (!isNumber(args[i])) throw ConfigException("Invalid error_page code: " + args[i]);
@@ -184,6 +209,18 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
     }
     ++it; // Skip '}'
     
+    // Ensure a default root location '/' exists to catch all unmatched requests
+    // (falling back to the server's root config)
+    if (newServer.locations.find("/") == newServer.locations.end()) {
+        LocationConfig defaultLoc;
+        defaultLoc.path = "/";
+        defaultLoc.root = newServer.root;
+        defaultLoc.index = newServer.index;
+        defaultLoc.client_max_body_size = newServer.client_max_body_size;
+        defaultLoc.error_pages = newServer.error_pages;
+        newServer.locations["/"] = defaultLoc;
+    }
+
     _servers.push_back(newServer);
 }
 
@@ -206,24 +243,11 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
     
     while (it != end && *it != "}") {
         std::string directive = *it;
-        std::vector<std::string> args;
-        ++it;
-        
-        while (it != end && *it != ";" && *it != "{" && *it != "}") {
-            if (isLocationDirectiveWord(*it)) {
-                throw ConfigException("Missing semicolon after location directive: " + directive);
-            }
-            args.push_back(*it);
-            ++it;
-        }
-        
-        if (it == end || *it != ";") {
-            throw ConfigException("Missing semicolon after location directive: " + directive);
-        }
+        std::vector<std::string> args = extractArgs(it, end, directive, false);
         
         // Process specific location directives
         if (directive == "allowed_methods") {
-            if (args.empty()) throw ConfigException("allowed_methods directive missing arguments");
+            requireArgs(args, directive);
             for (size_t j = 0; j < args.size(); ++j) {
                 if (args[j] != "GET" && args[j] != "POST" && args[j] != "DELETE") {
                     throw ConfigException("Invalid method in allowed_methods: '" + args[j] +
@@ -232,57 +256,45 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
             }
             newLocation.allowed_methods = args;
         } else if (directive == "root") {
-            if (args.empty()) throw ConfigException("root directive missing arguments");
+            requireArgs(args, directive);
             newLocation.root = args[0];
         } else if (directive == "alias") {
-            if (args.empty()) throw ConfigException("alias directive missing arguments");
+            requireArgs(args, directive);
             newLocation.alias = args[0];
         } else if (directive == "autoindex") {
-            if (args.empty()) throw ConfigException("autoindex directive missing arguments");
+            requireArgs(args, directive);
             if (args[0] == "on") newLocation.autoindex = true;
             else if (args[0] == "off") newLocation.autoindex = false;
             else throw ConfigException("Invalid autoindex value: " + args[0]);
         } else if (directive == "index") {
-            if (args.empty()) throw ConfigException("index directive missing arguments");
+            requireArgs(args, directive);
             newLocation.index = args[0];
         } else if (directive == "return") {
-            if (args.size() < 2) throw ConfigException("return directive missing arguments");
+            requireArgs(args, directive, 2);
             if (!isNumber(args[0])) throw ConfigException("Invalid return code: " + args[0]);
             newLocation.redirect_code = std::atoi(args[0].c_str());
             newLocation.redirect_url = args[1];
         } else if (directive == "cgi_extension") {
-            if (args.empty()) {
-                throw ConfigException("cgi_extension directive missing arguments");
-            }
+            requireArgs(args, directive);
             newLocation.cgi_extensions = args;
-            if (!newLocation.cgi_path.empty()) {
-                for (size_t i = 0; i < args.size(); ++i) {
-                    newLocation.cgi_map[args[i]] = newLocation.cgi_path;
-                }
-            }
         } else if (directive == "cgi_path") {
-            if (args.empty()) throw ConfigException("cgi_path directive missing arguments");
+            requireArgs(args, directive);
             newLocation.cgi_path = args[0];
-            if (!newLocation.cgi_extensions.empty()) {
-                for (size_t i = 0; i < newLocation.cgi_extensions.size(); ++i) {
-                    newLocation.cgi_map[newLocation.cgi_extensions[i]] = newLocation.cgi_path;
-                }
-            }
         } else if (directive == "cgi_idle_timeout") {
-            if (args.empty()) throw ConfigException("cgi_idle_timeout directive missing arguments");
+            requireArgs(args, directive);
             if (!isNumber(args[0])) throw ConfigException("Invalid cgi_idle_timeout: " + args[0]);
             newLocation.cgi_idle_timeout = std::atoi(args[0].c_str());
         } else if (directive == "cgi_max_timeout") {
-            if (args.empty()) throw ConfigException("cgi_max_timeout directive missing arguments");
+            requireArgs(args, directive);
             if (!isNumber(args[0])) throw ConfigException("Invalid cgi_max_timeout: " + args[0]);
             newLocation.cgi_max_timeout = std::atoi(args[0].c_str());
         } else if (directive == "upload_store") {
-            if (args.empty()) throw ConfigException("upload_store directive missing arguments");
+            requireArgs(args, directive);
             newLocation.upload_store = args[0];
         } else if (directive == "client_max_body_size") {
-            if (args.empty()) throw ConfigException("client_max_body_size directive missing arguments");
+            requireArgs(args, directive);
             size_t parsedSize = parseSizeWithUnit(args[0]);
-            if (parsedSize == 0) throw ConfigException("Invalid client_max_body_size: " + args[0]);
+            if (parsedSize == static_cast<size_t>(-1)) throw ConfigException("Invalid client_max_body_size: " + args[0]);
             newLocation.client_max_body_size = parsedSize;
             hasCustomMaxBody = true;
         } else {
@@ -296,6 +308,12 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         throw ConfigException("Unexpected end of file inside location block");
     }
     ++it; // Skip '}'
+
+    if (!newLocation.cgi_extensions.empty() && !newLocation.cgi_path.empty()) {
+        for (size_t i = 0; i < newLocation.cgi_extensions.size(); ++i) {
+            newLocation.cgi_map[newLocation.cgi_extensions[i]] = newLocation.cgi_path;
+        }
+    }
 
     // Inherit root from server if location doesn't specify one
     if (newLocation.root.empty()) {
@@ -359,9 +377,6 @@ void ConfigParser::validate() {
     }
 
     for (size_t i = 0; i < _servers.size(); ++i) {
-        if (_servers[i].listen_ports.empty()) {
-            throw ConfigException("No listen ports in server block");
-        }
         for (size_t p = 0; p < _servers[i].listen_ports.size(); ++p) {
             if (_servers[i].listen_ports[p] == 0) {
                 throw ConfigException("Invalid listen port in server block");
@@ -377,17 +392,7 @@ void ConfigParser::validate() {
             std::string fullPath = _servers[i].root;
             std::string errPath = it->second;
 
-            if (!fullPath.empty() && !errPath.empty()) {
-                if (fullPath[fullPath.size() - 1] == '/' && errPath[0] == '/') {
-                    fullPath += errPath.substr(1);
-                } else if (fullPath[fullPath.size() - 1] != '/' && errPath[0] != '/') {
-                    fullPath += "/" + errPath;
-                } else {
-                    fullPath += errPath;
-                }
-            } else {
-                fullPath += errPath;
-            }
+            fullPath = joinPaths(fullPath, errPath);
 
             struct stat buffer;
             if (stat(fullPath.c_str(), &buffer) != 0) {
