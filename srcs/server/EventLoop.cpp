@@ -545,15 +545,25 @@ void EventLoop::_checkTimeouts() {
 		// 1. Check if a CGI process timed out (idle or absolute config timeout)
 		if ((it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING)
 			&& it->second.cgi.checkTimeout()) {
+
 			int stdoutFd = it->second.cgi.getStdoutFd();
 			int stderrFd = it->second.cgi.getStderrFd();
 			int stdinFd = it->second.cgi.getStdinFd();
-			if (stdoutFd >= 0) { _removeEpollFd(stdoutFd); _cgiToClient.erase(stdoutFd); }
-			if (stderrFd >= 0) { _removeEpollFd(stderrFd); _cgiToClient.erase(stderrFd); }
-			if (stdinFd >= 0) { _removeEpollFd(stdinFd); _cgiToClient.erase(stdinFd); }
+			if (stdoutFd >= 0) {
+				_removeEpollFd(stdoutFd);
+				_cgiToClient.erase(stdoutFd); 
+			}
+			if (stderrFd >= 0) {
+				_removeEpollFd(stderrFd);
+				_cgiToClient.erase(stderrFd); 
+			}
+			if (stdinFd >= 0) {
+				_removeEpollFd(stdinFd);
+				_cgiToClient.erase(stdinFd); 
+			}
 
 			std::cerr << "[EventLoop] CGI timeout (fd " << it->first << ")" << std::endl;
-			
+
 			if (it->second.state == STATE_CGI_RUNNING) {
 				// Timeout before headers sent -> send clean 504 HTML page
 				it->second.response.buildErrorPage(504);
