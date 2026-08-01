@@ -35,8 +35,10 @@ private:
 	void	_handleWrite(int clientFd);
 	void	_handleDisconnect(int clientFd);
 	void	_handleCgiReady(int pipeFd, uint32_t events);
-
-	// Request dispatching & CGI helpers
+	
+	// helpers for event handlers
+	bool	_reloadWriteBuffer(int clientFd, Client &client);
+	void	_handleKeepAlive(int clientFd, Client &client);
 	void	_dispatchRequest(int clientFd, Client &client);
 	void	_spawnCgi(int clientFd, Client &client, const ServerConfig &bestConfig);
 	void	_startWriting(Client &client);
