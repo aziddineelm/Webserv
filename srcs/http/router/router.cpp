@@ -133,10 +133,7 @@ bool Router::_isMethodAllowed(const std::string &method, const LocationConfig &l
 // ============================================================
 
 std::string Router::_resolvePath(const std::string &uri, const LocationConfig &loc) {
-	// Alias replaces the location prefix entirely with a different path
-	// Root appends the remainder after stripping the prefix
 	if (!loc.alias.empty()) {
-		// alias: /kapouet → /tmp/www means /kapouet/foo → /tmp/www/foo
 		std::string remainder;
 		if (uri.size() > loc.path.size())
 			remainder = uri.substr(loc.path.size());
