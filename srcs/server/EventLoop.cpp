@@ -514,8 +514,6 @@ void EventLoop::_addEpollFd(int fd, uint32_t events) {
 
 void EventLoop::_removeEpollFd(int fd) {
 	if (epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL) == -1) {
-		// EBADF is expected when CGI handler already closed the FD
-		// (Linux auto-removes closed FDs from epoll)
 		if (errno != EBADF) {
 			std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_DEL) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
 		}
