@@ -308,7 +308,6 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         } else {
             throw ConfigException("Unknown location directive: " + directive);
         }
-        
         ++it; // Skip ';'
     }
     

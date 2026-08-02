@@ -9,39 +9,22 @@
 class Request;
 class ServerConfig;
 
-// State of a CGI process managed by CGIHandler.
 enum CgiState {
-    CGI_IDLE,           // No CGI process running
-    CGI_WRITING,        // Writing request body to CGI stdin
-    CGI_READING,        // Reading CGI stdout/stderr (stdin already closed)
-    CGI_HEADERS_READY,  // CGI headers parsed, body is streaming
-    CGI_DONE,           // CGI finished successfully
-    CGI_ERROR           // CGI failed (timeout, spawn error, etc.)
+    CGI_IDLE,
+    CGI_WRITING,
+    CGI_READING,
+    CGI_HEADERS_READY,
+    CGI_DONE,
+    CGI_ERROR
 };
 
-// Non-blocking CGI handler designed to integrate with an external event loop.
-//
-// Usage (non-blocking, for the main server loop):
-//   1. Call start() to fork/exec the CGI script.
-//   2. Register getStdinFd(), getStdoutFd(), getStderrFd() with your poll() set.
-//   3. When poll() says a FD is ready, call the corresponding on*Ready() method.
-//   4. Periodically call checkTimeout() to enforce the time limit.
-//   5. When headersReady() returns true, start streaming body via popOutput().
-//   6. When getState() returns CGI_DONE or CGI_ERROR, read getOutput()/getError().
-//
-// Usage (blocking, for tests):
-//   Call run() which wraps all of the above in a local poll() loop.
+
+// --- Non-blocking API (for main event loop integration) ---
 class CGIHandler {
 public:
     CGIHandler();
     ~CGIHandler();
 
-    // --- Non-blocking API (for main event loop integration) ---
-
-    // Start the CGI process, streaming the POST body from a file on disk.
-    // This avoids loading the entire body into RAM, preventing OOM on
-    // large uploads (e.g. 5GB video files).
-    // Pass an empty bodyFilePath to skip body input entirely.
     bool start(const std::string& scriptPath,
                const std::string& interpreterPath,
                const std::vector<std::string>& env,
@@ -49,33 +32,22 @@ public:
                int idleTimeoutSec = 30,
                int maxTimeoutSec = 0);
 
-
-    // High-level wrapper: prepares environment, resolves symlinks, and starts CGI from an HTTP Request.
     bool startFromRequest(const Request& req,
                           const ServerConfig& config,
                           const std::string& scriptPath,
                           const std::string& interpreterPath,
                           const std::string& clientIp = "");
 
-    // Called by the main loop when poll() reports stdinFd is writable.
     void onStdinReady();
-
-    // Called by the main loop when poll() reports stdoutFd is readable.
     void onStdoutReady();
-
-    // Called by the main loop when poll() reports stderrFd is readable.
     void onStderrReady();
 
-    // Check if the CGI has exceeded its timeout (idle or absolute).
-    // Returns true if timed out. Should be called periodically.
     bool checkTimeout();
 
     // Kill the process if still running, close any open FDs, reap child.
     void cleanup();
 
     // --- Getters ---
-
-    // File descriptors for poll() registration. Returns -1 if closed/unused.
     int getStdinFd() const;
     int getStdoutFd() const;
     int getStderrFd() const;
@@ -83,24 +55,13 @@ public:
     CgiState getState() const;
     const std::string& getError() const;
 
-    // True if CGI process exited with status 0.
     bool succeeded() const;
 
     // --- Streaming API ---
-
-    // Returns true once CGI headers have been parsed from stdout.
     bool headersReady() const;
-
-    // Access the parsed CGI headers (valid after headersReady() == true).
     const std::map<std::string, std::string>& getCgiHeaders() const;
-
-    // Returns true if there are body bytes waiting to be sent to the client.
     bool hasPendingOutput() const;
-
-    // Pop up to maxBytes from the output queue. Returns empty string if nothing available.
     std::string popOutput(size_t maxBytes = 8192);
-
-    // Returns true when stdout is closed AND all queued output has been popped.
     bool outputFullyConsumed() const;
 
 
@@ -111,11 +72,11 @@ private:
     int _stdoutFd;
     int _stderrFd;
 
-    std::string _input;      // Intermediate I/O buffer for reading from body file
+    std::string _input;
     size_t _inputPos;
     std::string _error;
 
-    int _bodyFileFd;         // FD for streaming body from temp file (-1 if unused)
+    int _bodyFileFd;
 
     time_t _startTime;
     int _exitStatus;
@@ -123,34 +84,22 @@ private:
 
     // --- Streaming state ---
     bool _headersParsed;
-    std::string _rawBuffer;           // Accumulates stdout until headers are found
-    std::map<std::string, std::string> _cgiHeaders;  // Parsed CGI headers
-    std::string _outputQueue;         // Body bytes ready for EventLoop to consume
-    size_t _outputQueueOffset;        // Offset into _outputQueue (avoids O(n) erase)
+    std::string _rawBuffer;
+    std::map<std::string, std::string> _cgiHeaders;
+    std::string _outputQueue;
+    size_t _outputQueueOffset;
 
     // --- Dual timeout state ---
-    time_t _lastActivityTime;         // Updated on every successful read()
-    int _idleTimeoutSeconds;          // Inactivity timeout (nginx-style, default 30)
-    int _maxTimeoutSeconds;           // Absolute timeout (php-fpm-style, 0 = disabled)
+    time_t _lastActivityTime;
+    int _idleTimeoutSeconds;
+    int _maxTimeoutSeconds;
 
     // --- Private helpers ---
-
-    // Try to reap the child process (non-blocking). Updates _exited/_exitStatus.
     void tryReap();
-
-    // Check if all output pipes are closed and transition to CGI_DONE if so.
     void checkDone();
-
-    // Close a file descriptor and set it to -1.
     void closeFd(int& fd);
-
-    // Detect \r\n\r\n in _rawBuffer and parse CGI headers using CGIResponseParser.
     void _tryParseHeaders();
-
-    // Reclaim memory when _outputQueueOffset exceeds half of _outputQueue.
     void _compactOutputQueue();
-
-    // int to string helper (no C++11 std::to_string).
     static std::string _intToStr(int n);
 };
 
