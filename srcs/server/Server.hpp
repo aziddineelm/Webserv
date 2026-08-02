@@ -11,10 +11,10 @@ public:
 	Server();
 	~Server();
 
-	// Initialize: create listening sockets for each port and pass configs to event loop
+	// Sets up listening sockets for each port and passes configs to EventLoop
 	bool	init(const std::vector<int> &ports, const std::vector<ServerConfig> &configs);
-
-	// Run the event loop (delegates to EventLoop)
+	
+	// Blocking call: delegates execution to the underlying EventLoop
 	void	run();
 
 	// Stop the server gracefully

@@ -1,36 +1,38 @@
 #include "EventLoop.hpp"
 #include <iostream>
-#include <cstring>		// strerror
-#include <cerrno>		// errno
-#include <unistd.h>		// close
-#include <fcntl.h>		// fcntl, O_NONBLOCK
-#include <netinet/in.h>	// sockaddr_in, ntohl, ntohs
-#include <sys/socket.h>	// recv, send, accept
-#include <csignal>		// sig_atomic_t
-#include <cstdlib>		// atoi
+#include <cstring>
+#include <cerrno>
+#include <unistd.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <csignal>
+#include <cstdlib>
 #include "../http/router/router.hpp"
 #include "../http/response/response.hpp"
 
-// External flag set by signal handler (defined in main.cpp)
+
+
+#define EPOLL_TIMEOUT_MS 1000
+#define CLIENT_TIMEOUT_SEC 60
+#define READ_BUFFER_SIZE 8192
+#define EPOLL_SIZE 1024
+#define MAX_EVENTS 1024
+
+
 extern volatile sig_atomic_t g_running;
 
-#define POLL_TIMEOUT_MS		1000	// Wake up every second for timeout checks
-#define CLIENT_TIMEOUT_SEC	60		// Close clients idle for 60 seconds
-#define READ_BUFFER_SIZE	8192	// Stack buffer for recv() — one read per poll cycle
 
-// --------------------------------------------------------------------------
+
 // Constructor / Destructor
-// --------------------------------------------------------------------------
-
 EventLoop::EventLoop() : _running(false) {
-	_epollFd = epoll_create(1024);
+	_epollFd = epoll_create(EPOLL_SIZE);
 	if (_epollFd < 0) {
 		std::cerr << "[EventLoop] epoll_create() error: " << std::strerror(errno) << std::endl;
 	}
 }
 
 EventLoop::~EventLoop() {
-	// Close all tracked client FDs (listening FDs are owned by Socket/Server)
 	for (std::map<int, Client>::iterator it = _clients.begin();
 		 it != _clients.end(); ++it) {
 		close(it->second.fd);
@@ -61,19 +63,22 @@ void EventLoop::addListenFd(int fd, int port) {
 // --------------------------------------------------------------------------
 
 void EventLoop::run() {
-	if (_epollFd < 0) return;
+
+	if (_epollFd < 0)
+		return;
+
 	_running = true;
 	std::cout << "[EventLoop] Running... (press Ctrl+C to stop)" << std::endl;
 
-	const int MAX_EVENTS = 1024;
 	struct epoll_event events[MAX_EVENTS];
 
 	while (_running && g_running) {
-		int numEvents = epoll_wait(_epollFd, events, MAX_EVENTS, POLL_TIMEOUT_MS);
+
+		int numEvents = epoll_wait(_epollFd, events, MAX_EVENTS, EPOLL_TIMEOUT_MS);
 
 		if (numEvents < 0) {
 			if (errno == EINTR)
-				continue;	// Signal interrupted epoll — just retry
+				continue;
 			std::cerr << "[EventLoop] epoll_wait() error: "
 					  << std::strerror(errno) << std::endl;
 			break;
@@ -171,13 +176,13 @@ void EventLoop::_handleAccept(int listenFd) {
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleRead(int clientFd) {
-	// Find the client — must exist if we got here
+	// Find the client
 	std::map<int, Client>::iterator it = _clients.find(clientFd);
 	if (it == _clients.end())
 		return;
 	Client &client = it->second;
 
-	// Single recv per poll cycle — prevents one fast client from starving others
+	// Single recv per epoll cycle — prevents one fast client from starving others
 	char buf[READ_BUFFER_SIZE];
 	ssize_t bytesRead = recv(clientFd, buf, sizeof(buf), 0);
 
@@ -288,6 +293,7 @@ void EventLoop::_spawnCgi(int clientFd, Client &client, const ServerConfig &serv
 // --------------------------------------------------------------------------
 
 void EventLoop::_handleWrite(int clientFd) {
+
 	std::map<int, Client>::iterator it = _clients.find(clientFd);
 	if (it == _clients.end())
 		return;
@@ -312,68 +318,60 @@ void EventLoop::_handleWrite(int clientFd) {
 
 	// Check if the current buffer chunk has been fully sent
 	if (client.writeOffset >= client.writeBuffer.size()) {
-		// CGI streaming: buffer flushed, check for more data
-		if (client.state == STATE_CGI_STREAMING) {
-			client.writeBuffer.clear();
-			client.writeOffset = 0;
-			
-			if (client.cgi.hasPendingOutput()) {
-				client.writeBuffer = Response::formatChunk(client.cgi.popOutput());
-			}
-			
-			if (client.cgi.getState() == CGI_DONE && client.cgi.outputFullyConsumed()) {
-				client.response.markDone();
-				client.state = STATE_WRITING;
-				client.writeBuffer.append(client.response.getNextChunk()); // terminal chunk
-			}
-			
-			if (client.writeBuffer.empty()) {
-				_setEpollEvents(clientFd, 0); // Pause writes until CGI produces more
-			}
-			return;
-		}
-
-		// If there is more data to send (file streaming), load the next chunk
-		if (!client.response.isDone()) {
-			client.writeBuffer = client.response.getNextChunk();
-			client.writeOffset = 0;
-			return; // Wait for next POLLOUT cycle
-		}
-
-		std::cout << "[EventLoop] Response fully sent (fd " << clientFd << ")" << std::endl;
-		
-		if (client.request.isKeepAlive()) {
-			client.writeBuffer.clear();
-			client.writeOffset = 0;
-			client.request.reset();
-			client.response = Response(); // Reset response for next request
-			client.state = STATE_READING;
-			client.lastActivity = time(NULL);
-			_setEpollEvents(clientFd, EPOLLIN);
-		} else {
-			std::cout << "[EventLoop] Connection: close requested, disconnecting fd " << clientFd << std::endl;
-			_handleDisconnect(clientFd);
+		if (!_reloadWriteBuffer(clientFd, client)) {
+			// No more data to reload, the response is completely finished.
+			_handleKeepAlive(clientFd, client);
 		}
 	}
 }
 
-// --------------------------------------------------------------------------
-// Event: Client disconnect — cleanup resources
-// --------------------------------------------------------------------------
-
-void EventLoop::_handleDisconnect(int clientFd) {
-	std::map<int, Client>::iterator it = _clients.find(clientFd);
-	if (it != _clients.end() && (it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING)) {
-		int stdoutFd = it->second.cgi.getStdoutFd();
-		int stderrFd = it->second.cgi.getStderrFd();
-		int stdinFd  = it->second.cgi.getStdinFd();
-		if (stdoutFd >= 0) { _removeEpollFd(stdoutFd); _cgiToClient.erase(stdoutFd); }
-		if (stderrFd >= 0) { _removeEpollFd(stderrFd); _cgiToClient.erase(stderrFd); }
-		if (stdinFd  >= 0) { _removeEpollFd(stdinFd);  _cgiToClient.erase(stdinFd);  }
+bool EventLoop::_reloadWriteBuffer(int clientFd, Client &client) {
+	// CGI streaming: buffer flushed, check for more data
+	if (client.state == STATE_CGI_STREAMING) {
+		client.writeBuffer.clear();
+		client.writeOffset = 0;
+		
+		if (client.cgi.hasPendingOutput()) {
+			client.writeBuffer = Response::formatChunk(client.cgi.popOutput());
+		}
+		
+		if (client.cgi.getState() == CGI_DONE && client.cgi.outputFullyConsumed()) {
+			client.response.markDone();
+			client.state = STATE_WRITING;
+			client.writeBuffer.append(client.response.getNextChunk()); // terminal chunk
+		}
+		
+		if (client.writeBuffer.empty()) {
+			_setEpollEvents(clientFd, 0); // Pause writes until CGI produces more
+		}
+		return true; // Still streaming (or paused), keep connection alive
 	}
-	_removeEpollFd(clientFd);
-	close(clientFd);
-	_clients.erase(clientFd);
+
+	// If there is more data to send (file streaming), load the next chunk
+	if (!client.response.isDone()) {
+		client.writeBuffer = client.response.getNextChunk();
+		client.writeOffset = 0;
+		return true; // Wait for next POLLOUT cycle
+	}
+
+	return false; // Response is completely done
+}
+
+void EventLoop::_handleKeepAlive(int clientFd, Client &client) {
+	std::cout << "[EventLoop] Response fully sent (fd " << clientFd << ")" << std::endl;
+	
+	if (client.request.isKeepAlive()) {
+		client.writeBuffer.clear();
+		client.writeOffset = 0;
+		client.request.reset();
+		client.response = Response();
+		client.state = STATE_READING;
+		client.lastActivity = time(NULL);
+		_setEpollEvents(clientFd, EPOLLIN);
+	} else {
+		std::cout << "[EventLoop] Closing connection: client (fd=" << clientFd << ")" << std::endl;
+		_handleDisconnect(clientFd);
+	}
 }
 
 
@@ -469,6 +467,37 @@ void EventLoop::_handleCgiReady(int pipeFd, uint32_t events) {
 	}
 }
 
+// --------------------------------------------------------------------------
+// Event: Client disconnect — cleanup resources
+// --------------------------------------------------------------------------
+
+void EventLoop::_handleDisconnect(int clientFd) {
+	std::map<int, Client>::iterator it = _clients.find(clientFd);
+	if (it == _clients.end())
+		return;
+	// if the client is running a cgi process, clean up the cgi process
+	if (it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING) {
+		int stdoutFd = it->second.cgi.getStdoutFd();
+		int stderrFd = it->second.cgi.getStderrFd();
+		int stdinFd  = it->second.cgi.getStdinFd();
+		if (stdoutFd >= 0) {
+			_removeEpollFd(stdoutFd);
+			_cgiToClient.erase(stdoutFd); 
+		}
+		if (stderrFd >= 0) {
+			_removeEpollFd(stderrFd);
+			_cgiToClient.erase(stderrFd); 
+		}
+		if (stdinFd  >= 0) {
+			_removeEpollFd(stdinFd);
+			_cgiToClient.erase(stdinFd); 
+		}
+	}
+	_removeEpollFd(clientFd);
+	close(clientFd);
+	_clients.erase(clientFd);
+}
+
 
 // --------------------------------------------------------------------------
 // epoll helpers
@@ -485,8 +514,6 @@ void EventLoop::_addEpollFd(int fd, uint32_t events) {
 
 void EventLoop::_removeEpollFd(int fd) {
 	if (epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, NULL) == -1) {
-		// EBADF is expected when CGI handler already closed the FD
-		// (Linux auto-removes closed FDs from epoll)
 		if (errno != EBADF) {
 			std::cerr << "[EventLoop] epoll_ctl(EPOLL_CTL_DEL) failed for fd " << fd << ": " << std::strerror(errno) << std::endl;
 		}
@@ -503,6 +530,7 @@ void EventLoop::_setEpollEvents(int fd, uint32_t events) {
 }
 
 
+
 // --------------------------------------------------------------------------
 // Timeout check
 // --------------------------------------------------------------------------
@@ -515,15 +543,25 @@ void EventLoop::_checkTimeouts() {
 		// 1. Check if a CGI process timed out (idle or absolute config timeout)
 		if ((it->second.state == STATE_CGI_RUNNING || it->second.state == STATE_CGI_STREAMING)
 			&& it->second.cgi.checkTimeout()) {
+
 			int stdoutFd = it->second.cgi.getStdoutFd();
 			int stderrFd = it->second.cgi.getStderrFd();
 			int stdinFd = it->second.cgi.getStdinFd();
-			if (stdoutFd >= 0) { _removeEpollFd(stdoutFd); _cgiToClient.erase(stdoutFd); }
-			if (stderrFd >= 0) { _removeEpollFd(stderrFd); _cgiToClient.erase(stderrFd); }
-			if (stdinFd >= 0) { _removeEpollFd(stdinFd); _cgiToClient.erase(stdinFd); }
+			if (stdoutFd >= 0) {
+				_removeEpollFd(stdoutFd);
+				_cgiToClient.erase(stdoutFd); 
+			}
+			if (stderrFd >= 0) {
+				_removeEpollFd(stderrFd);
+				_cgiToClient.erase(stderrFd); 
+			}
+			if (stdinFd >= 0) {
+				_removeEpollFd(stdinFd);
+				_cgiToClient.erase(stdinFd); 
+			}
 
 			std::cerr << "[EventLoop] CGI timeout (fd " << it->first << ")" << std::endl;
-			
+
 			if (it->second.state == STATE_CGI_RUNNING) {
 				// Timeout before headers sent -> send clean 504 HTML page
 				it->second.response.buildErrorPage(504);

@@ -124,7 +124,6 @@ void Response::buildFromCgiHeaders(const std::map<std::string, std::string> &cgi
 	_headers.erase("Content-Length");
 	setHeader("Transfer-Encoding", "chunked");
 	_isChunked = true;
-	_headersSent = true;
 }
 
 void Response::markDone() { _cgiEOF = true; }

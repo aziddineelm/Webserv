@@ -1,9 +1,9 @@
 #include "Server.hpp"
 #include <iostream>
 
-// --------------------------------------------------------------------------
-// Constructor / Destructor
-// --------------------------------------------------------------------------
+// ==========================================================================
+// Constructor & Destructor
+// ==========================================================================
 
 Server::Server() {
 }
@@ -15,12 +15,11 @@ Server::~Server() {
 	std::cout << "[Server] All sockets cleaned up" << std::endl;
 }
 
-// --------------------------------------------------------------------------
-// Public: init
-// --------------------------------------------------------------------------
 
 bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig> &configs) {
+
 	_eventLoop.setConfigs(configs);
+
 	if (ports.empty()) {
 		std::cerr << "[Server] Error: no ports to listen on" << std::endl;
 		return false;
@@ -32,34 +31,27 @@ bool Server::init(const std::vector<int> &ports, const std::vector<ServerConfig>
 			std::cerr << "[Server] Failed to set up socket on port "
 					  << ports[i] << std::endl;
 			delete sock;
-			// Clean up already created sockets
+			
 			for (size_t j = 0; j < _sockets.size(); ++j)
 				delete _sockets[j];
 			_sockets.clear();
+			
 			return false;
 		}
 		_sockets.push_back(sock);
-
-		// Register with EventLoop for poll() monitoring
 		_eventLoop.addListenFd(sock->getFd(), sock->getPort());
 	}
 
 	std::cout << "[Server] Initialized with " << _sockets.size()
 			  << " listening socket(s)" << std::endl;
+
 	return true;
 }
 
-// --------------------------------------------------------------------------
-// Public: run — delegates to EventLoop
-// --------------------------------------------------------------------------
 
 void Server::run() {
 	_eventLoop.run();
 }
-
-// --------------------------------------------------------------------------
-// Public: stop — delegates to EventLoop
-// --------------------------------------------------------------------------
 
 void Server::stop() {
 	_eventLoop.stop();
