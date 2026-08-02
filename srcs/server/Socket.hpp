@@ -19,7 +19,6 @@ public:
 private:
 	int					_fd;
 	int					_port;
-	struct sockaddr_in	_addr;
 
 	// Internal helpers — each wraps one syscall
 	bool	_createSocket();
@@ -28,7 +27,7 @@ private:
 	bool	_startListening();
 	bool	_setNonBlocking();
 
-	// Non-copyable (prevent double close)
+	// Non-copyable
 	Socket(const Socket &);
 	Socket &operator=(const Socket &);
 };

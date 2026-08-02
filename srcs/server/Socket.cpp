@@ -1,18 +1,16 @@
 #include "Socket.hpp"
 #include <iostream>
-#include <cstring>    // memset, strerror
-#include <cerrno>     // errno
-#include <unistd.h>   // close
-#include <fcntl.h>    // fcntl, O_NONBLOCK
-#include <sys/socket.h> // socket, AF_INET, SOCK_STREAM, SOL_SOCKET
-#include <arpa/inet.h> // htonl, htons
+#include <cstring>
+#include <cerrno>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
-// --------------------------------------------------------------------------
-// Constructor / Destructor
-// --------------------------------------------------------------------------
+
+// Constructor & Destructor
 
 Socket::Socket() : _fd(-1), _port(0) {
-	std::memset(&_addr, 0, sizeof(_addr));
 }
 
 Socket::~Socket() {
@@ -23,9 +21,8 @@ Socket::~Socket() {
 	}
 }
 
-// --------------------------------------------------------------------------
-// Public: setup
-// --------------------------------------------------------------------------
+
+// Core Operations
 
 bool Socket::setup(int port) {
 	_port = port;
@@ -46,9 +43,8 @@ bool Socket::setup(int port) {
 	return true;
 }
 
-// --------------------------------------------------------------------------
+
 // Getters
-// --------------------------------------------------------------------------
 
 int Socket::getFd() const {
 	return _fd;
@@ -58,9 +54,8 @@ int Socket::getPort() const {
 	return _port;
 }
 
-// --------------------------------------------------------------------------
-// Private helpers — one syscall each
-// --------------------------------------------------------------------------
+
+// Low-Level Syscall Wrappers
 
 bool Socket::_createSocket() {
 	_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -77,23 +72,22 @@ bool Socket::_setOptions() {
 	if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
 		std::cerr << "[Socket] setsockopt(SO_REUSEADDR) failed: "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;
 }
 
 bool Socket::_bindSocket() {
-	_addr.sin_family = AF_INET;
-	_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	_addr.sin_port = htons(_port);
+	struct sockaddr_in addr;
+	std::memset(&addr, 0, sizeof(addr));
+	
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(_port);
 
-	if (bind(_fd, (struct sockaddr *)&_addr, sizeof(_addr)) == -1) {
+	if (bind(_fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
 		std::cerr << "[Socket] bind() failed on port " << _port << ": "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;
@@ -103,8 +97,6 @@ bool Socket::_startListening() {
 	if (listen(_fd, 128) == -1) {
 		std::cerr << "[Socket] listen() failed on port " << _port << ": "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;
@@ -114,8 +106,6 @@ bool Socket::_setNonBlocking() {
 	if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1) {
 		std::cerr << "[Socket] fcntl(O_NONBLOCK) failed on port " << _port << ": "
 				  << std::strerror(errno) << std::endl;
-		close(_fd);
-		_fd = -1;
 		return false;
 	}
 	return true;

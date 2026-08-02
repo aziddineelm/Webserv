@@ -23,20 +23,22 @@ public:
 
 private:
 	int							_epollFd;
-	std::map<int, Client>		_clients;		// clientFd → Client
-	std::map<int, int>			_listenPorts;	// listenFd → port
-	std::map<int, int>			_cgiToClient;	// cgiFd → clientFd
-	std::vector<ServerConfig>	_configs;		// All server configurations
+	std::map<int, Client>		_clients;
+	std::map<int, int>			_listenPorts;
+	std::map<int, int>			_cgiToClient;
+	std::vector<ServerConfig>	_configs;
 	bool						_running;
 
 	// Event handlers
 	void	_handleAccept(int listenFd);
 	void	_handleRead(int clientFd);
 	void	_handleWrite(int clientFd);
-	void	_handleDisconnect(int clientFd);
 	void	_handleCgiReady(int pipeFd, uint32_t events);
-
-	// Request dispatching & CGI helpers
+	void	_handleDisconnect(int clientFd);
+	
+	// helpers for event handlers
+	bool	_reloadWriteBuffer(int clientFd, Client &client);
+	void	_handleKeepAlive(int clientFd, Client &client);
 	void	_dispatchRequest(int clientFd, Client &client);
 	void	_spawnCgi(int clientFd, Client &client, const ServerConfig &bestConfig);
 	void	_startWriting(Client &client);
