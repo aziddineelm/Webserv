@@ -1,9 +1,0 @@
-@keyframes colorFlash {
-    0% { background-color: #00ff88; } /* Strong Yellow */
-    50% { background-color: #ff00ea; } /* Strong Magenta */
-    100% { background-color: #ffff00; }
-}
-
-body {
-    animation: colorFlash 0.3s infinite;
-}
