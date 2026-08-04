@@ -227,6 +227,7 @@ void ConfigParser::parseServerBlock(std::vector<std::string>::iterator& it, cons
 void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, const std::vector<std::string>::iterator& end, ServerConfig& currentServer) {
     LocationConfig newLocation;
     bool hasCustomMaxBody = false;
+    std::vector<std::string> pending_cgi_extensions;
     
     if (it == end || *it == "{") {
         throw ConfigException("Missing path for location block");
@@ -276,10 +277,17 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
             newLocation.redirect_url = args[1];
         } else if (directive == "cgi_extension") {
             requireArgs(args, directive);
-            newLocation.cgi_extensions = args;
+            for (size_t i = 0; i < args.size(); ++i) {
+                newLocation.cgi_extensions.push_back(args[i]);
+                pending_cgi_extensions.push_back(args[i]);
+            }
         } else if (directive == "cgi_path") {
             requireArgs(args, directive);
             newLocation.cgi_path = args[0];
+            for (size_t i = 0; i < pending_cgi_extensions.size(); ++i) {
+                newLocation.cgi_map[pending_cgi_extensions[i]] = newLocation.cgi_path;
+            }
+            pending_cgi_extensions.clear();
         } else if (directive == "cgi_idle_timeout") {
             requireArgs(args, directive);
             if (!isNumber(args[0])) throw ConfigException("Invalid cgi_idle_timeout: " + args[0]);
@@ -300,7 +308,6 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
         } else {
             throw ConfigException("Unknown location directive: " + directive);
         }
-        
         ++it; // Skip ';'
     }
     
@@ -309,10 +316,12 @@ void ConfigParser::parseLocationBlock(std::vector<std::string>::iterator& it, co
     }
     ++it; // Skip '}'
 
-    if (!newLocation.cgi_extensions.empty() && !newLocation.cgi_path.empty()) {
-        for (size_t i = 0; i < newLocation.cgi_extensions.size(); ++i) {
-            newLocation.cgi_map[newLocation.cgi_extensions[i]] = newLocation.cgi_path;
+    if (!pending_cgi_extensions.empty() && !newLocation.cgi_path.empty()) {
+        for (size_t i = 0; i < pending_cgi_extensions.size(); ++i) {
+            newLocation.cgi_map[pending_cgi_extensions[i]] = newLocation.cgi_path;
         }
+    } else if (!pending_cgi_extensions.empty()) {
+        throw ConfigException("cgi_extension specified without cgi_path");
     }
 
     // Inherit root from server if location doesn't specify one
