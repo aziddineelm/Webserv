@@ -18,8 +18,7 @@
 8. [Cross-Team Integration: How A ↔ B ↔ C Connect](#8-cross-team-integration)
 9. [FD Ownership & Leak Prevention Model](#9-fd-ownership-model)
 10. [Signal Handling & Graceful Shutdown](#10-signal-handling)
-11. [Evaluator Q&A Scripts (15 Questions)](#11-evaluator-qa-scripts)
-12. [Quick-Reference Cheat Sheet](#12-cheat-sheet)
+11. [Quick-Reference Cheat Sheet](#11-cheat-sheet)
 
 ---
 
@@ -703,56 +702,7 @@ flowchart LR
 
 ---
 
-## 11. Evaluator Q&A Scripts
-
-### Q1: *"Why `epoll` instead of `select` or `poll`?"*
-> *"`epoll` is $O(1)$ per event, while `poll` and `select` are $O(N)$. With `epoll`, we register FDs once into a kernel-side Red-Black Tree using `epoll_ctl` at [EventLoop.cpp:L506](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L506). When data arrives, a hardware interrupt callback pushes only that FD to a Ready List. `epoll_wait` at [L77](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L77) returns only active FDs — no scanning. With `poll`, we'd have to rebuild the entire `pollfd` array and the kernel would scan every single FD every iteration."*
-
-### Q2: *"Show me where every socket is set to non-blocking."*
-> *"Two places: (1) Listening sockets at [Socket.cpp:L106](file:///home/aysadeq/Desktop/Webserv/srcs/server/Socket.cpp#L106) inside `_setNonBlocking()`. (2) Accepted client sockets immediately after `accept()` at [EventLoop.cpp:L154](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L154). If we forgot either one, a slow client would block our entire single-threaded server."*
-
-### Q3: *"What is `EAGAIN` / `EWOULDBLOCK` and how do you handle it?"*
-> *"On non-blocking FDs, when there's no data to read or the send buffer is full, the syscall returns `-1` with `errno == EAGAIN`. It means 'I would have blocked — try later.' In `_handleAccept` at [L146](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L146), we break the accept-drain loop on `EAGAIN`. We then return to `epoll_wait` and let the kernel notify us when more data/space is available."*
-
-### Q4: *"Why do you loop inside `_handleAccept()` instead of accepting just once?"*
-> *"Multiple clients can complete the TCP handshake between two `epoll_wait()` calls. If we only `accept()` once per `EPOLLIN` on the listener, connections pile up in the kernel's backlog. We drain the queue by looping until `EAGAIN` — see the `while(true)` loop at [L139-L171](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L139-L171)."*
-
-### Q5: *"How do you handle partial reads and partial writes?"*
-> *"We never assume one `recv()` gives us a complete HTTP request, or one `send()` transmits the whole response. For reading, we `recv()` up to 8192 bytes at [L187](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L187) and feed them to Person B's streaming `request.feed()` at [L206](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L206). For writing, we track `writeOffset` — each `send()` at [L306](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L306) advances the offset. When the buffer is empty, `_reloadWriteBuffer()` at [L328](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L328) loads the next chunk for large file streaming."*
-
-### Q6: *"Show me where you prevent file descriptor leaks."*
-> *"Every FD has exactly one close path: `_handleDisconnect()` at [L474-L499](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L474-L499) removes from `epoll`, closes CGI pipes if running, `close(clientFd)`, and erases from `_clients`. The destructor at [L35-L43](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L35-L43) catches any remaining FDs on shutdown. `Socket::~Socket()` at [Socket.cpp:L16-L22](file:///home/aysadeq/Desktop/Webserv/srcs/server/Socket.cpp#L16-L22) closes listening FDs. You can verify with `ls /proc/<pid>/fd` during stress testing."*
-
-### Q7: *"What happens if a client connects but never sends anything?"*
-> *"`_checkTimeouts()` at [L538-L591](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L538-L591) runs after every `epoll_wait()`. It compares `time(NULL) - client.lastActivity` against `CLIENT_TIMEOUT_SEC` (60 seconds). Idle clients get `_handleDisconnect()`'d. This prevents slowloris-style resource exhaustion."*
-
-### Q8: *"How does CGI work without blocking the server?"*
-> *"CGI pipe FDs (`stdinFd`, `stdoutFd`, `stderrFd`) are registered into the same `epoll` instance as client sockets — see [L273-L284](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L273-L284). When `epoll_wait` returns a pipe event, `_handleCgiReady()` at [L382](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L382) delegates to `onStdinReady()`, `onStdoutReady()`, or `onStderrReady()`. We also suspend the client socket (`_setEpollEvents(clientFd, 0)` at [L267](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L267)) during CGI, and re-register it for `EPOLLOUT` only when CGI headers are ready at [L430](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L430)."*
-
-### Q9: *"What if a CGI script runs forever?"*
-> *"`_checkTimeouts()` checks `client.cgi.checkTimeout()` at [L545](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L545). After the timeout period, the handler kills the child process with `SIGTERM`, reaps it with `waitpid(WNOHANG)`, closes all pipe FDs, and sends a `504 Gateway Timeout` error page to the client at [L567](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L567). If it timed out mid-stream (STATE_CGI_STREAMING), we can't send a 504 HTML page because the headers are already sent — so we forcefully terminate the chunked stream with `0\r\n\r\n`."*
-
-### Q10: *"Why is `SIGPIPE` ignored?"*
-> *"If a client disconnects while `send()` is writing to their socket, the kernel delivers `SIGPIPE` whose default action terminates the process. We `signal(SIGPIPE, SIG_IGN)` so `send()` returns `-1` with `errno == EPIPE` instead, which `_handleWrite()` handles gracefully."*
-
-### Q11: *"What is `SO_REUSEADDR` and why do you need it?"*
-> *"When a TCP connection closes, the socket enters `TIME_WAIT` state for up to 2 minutes to handle delayed packets. Without `SO_REUSEADDR` at [Socket.cpp:L72](file:///home/aysadeq/Desktop/Webserv/srcs/server/Socket.cpp#L72), restarting our server immediately after stopping would fail with 'Address already in use'. This option lets us rebind to the same port instantly."*
-
-### Q12: *"What does `listen(fd, 128)` mean? What's the 128?"*
-> *"The second argument to `listen()` at [Socket.cpp:L97](file:///home/aysadeq/Desktop/Webserv/srcs/server/Socket.cpp#L97) is the backlog size — the maximum number of pending TCP connections that have completed the 3-way handshake but haven't been `accept()`'d yet. If the queue fills up, new `SYN` packets from clients are dropped. 128 is a common production value."*
-
-### Q13: *"Why did you split `_handleWrite()` into three functions?"*
-> *"The original function was 70 lines long, handling three separate responsibilities: network push, buffer reload, and keep-alive management. We applied the Single Responsibility Principle by extracting `_reloadWriteBuffer()` at [L328](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L328) (manages CGI streaming and file streaming buffer refills) and `_handleKeepAlive()` at [L360](file:///home/aysadeq/Desktop/Webserv/srcs/server/EventLoop.cpp#L360) (handles connection reset or close). Now `_handleWrite()` is only 20 lines and reads like a clean pipeline."*
-
-### Q14: *"What happens if a CGI script generates 10GB of output for a slow client?"*
-> *"In our current implementation, the CGI output would accumulate in the C++ process memory because we buffer it in the CGIHandler. For the scope of this project with small CGI scripts and our timeout reaper, this is acceptable. In an enterprise-grade server like NGINX, you'd implement Backpressure by disabling `EPOLLIN` on the CGI stdout pipe when the C++ buffer exceeds a threshold (e.g. 64KB). This causes the OS pipe buffer to fill up, which blocks the Python `print()` call, effectively freezing the script until the network drains."*
-
-### Q15: *"Why do you use `if` instead of `else if` in `_handleCgiReady()`?"*
-> *"Because multiple conditions can become true simultaneously. For example, if a Python script prints one line of HTML and immediately exits, both `hasPendingOutput()` and `getState() == CGI_DONE` are true at the same time. If we used `else if`, we'd buffer the HTML but skip the finalization — the browser would hang forever waiting for the terminal chunk. Independent `if` statements let the state machine flow through multiple transitions in a single call."*
-
----
-
-## 12. Cheat Sheet
+## 11. Cheat Sheet
 
 A single-page reference to keep open during defense:
 
