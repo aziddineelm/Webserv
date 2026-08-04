@@ -265,18 +265,6 @@ siege -c 250 -r 250 http://localhost:8080/
 
 ---
 
-## Built With
-
-| Technology | Purpose |
-|-----------|---------|
-| C++98 | Core language (42 project constraint) |
-| I/O Multiplexing | Asynchronous event notification |
-| POSIX Sockets | Network communication |
-| fork / execve / pipe | CGI process execution |
-| Chunked Transfer Encoding | HTTP streaming |
-
----
-
 ## License
 
 This project was developed as part of the [42 school](https://42.fr) curriculum.
